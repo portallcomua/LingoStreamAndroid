@@ -39,13 +39,12 @@ jobs:
 
       - name: Write Fresh and Correct AndroidManifest
         run: |
-          # Ми повністю перезаписуємо маніфест ідеальним кодом із усіма потрібними дозволами
           cat << 'EOF' > android/app/src/main/AndroidManifest.xml
-          <manifest xmlns:android="http://android.com" package="com.example.lingostream">
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.example.lingostream">
               <uses-permission android:name="android.permission.INTERNET" />
               <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
               <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-              
+
               <application
                   android:label="lingostream"
                   android:name="${applicationName}"
