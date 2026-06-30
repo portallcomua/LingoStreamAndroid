@@ -1,16 +1,27 @@
 name: lingostream
-description: AI Live Screen and Voice Translator supported by Google Ads.
-version: 1.0.0+1
+description: AI Live Screen Subtitle Translator supported by Google Ads.
+publish_to: "none"
+
+version: 1.0.1+2
 
 environment:
-  sdk: '>=3.0.0 <4.0.0'
+  sdk: ">=3.0.0 <4.0.0"
 
 dependencies:
   flutter:
     sdk: flutter
+
   http: ^1.2.0
   package_info_plus: ^8.0.0
-  google_mobile_ads: ^5.1.0  # Офіційна бібліотека Google AdMob
+
+  # Google AdMob (поки placeholder)
+  google_mobile_ads: ^5.1.0
+
+  # Збереження користувацьких відео
+  shared_preferences: ^2.3.2
+
+  # Відкриття YouTube та GitHub
+  url_launcher: ^6.3.0
 
 dev_dependencies:
   flutter_test:
@@ -18,3 +29,6 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  assets:
+    - assets/logo.png
