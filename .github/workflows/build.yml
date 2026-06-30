@@ -50,7 +50,6 @@ jobs:
                   android:name="${applicationName}"
                   android:icon="@mipmap/ic_launcher">
 
-                  <!-- ОБОВ'ЯЗКОВО для google_mobile_ads, інакше app crash на старті -->
                   <meta-data
                       android:name="com.google.android.gms.ads.APPLICATION_ID"
                       android:value="ca-app-pub-3940256099942544~3347511713"/>
@@ -80,6 +79,9 @@ jobs:
 
       - name: Install dependencies
         run: flutter pub get
+
+      - name: Generate proper app icons
+        run: dart run flutter_launcher_icons
 
       - name: Build APK
         run: flutter build apk --debug
