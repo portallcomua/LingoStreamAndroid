@@ -26,9 +26,16 @@ jobs:
           flutter-version: '3.22.0'
           channel: 'stable'
 
-      - name: Recreate Android Project files
+      - name: Recreate Android Project files safely
         run: |
+          # 1. Тимчасово копіюємо ваш pubspec.yaml, щоб flutter create його не затер
+          cp pubspec.yaml pubspec.yaml.bak
+          
+          # 2. Створюємо файли платформи Android
           flutter create . --platforms=android --project-name=lingostream
+          
+          # 3. Повертаємо ваш оригінальний повний pubspec.yaml назад
+          mv pubspec.yaml.bak pubspec.yaml
 
       - name: Update Kotlin version for modern packages
         run: |
@@ -45,7 +52,7 @@ jobs:
 
       - name: Generate App Icons
         run: |
-          # Використовуємо універсальний dart run замінюючи застарілий flutter pub run
+          # Тепер пакет точно буде на місці
           dart run flutter_launcher_icons
 
       - name: Build APK
