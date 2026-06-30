@@ -37,10 +37,41 @@ jobs:
           sed -i 's/ext.kotlin_version = .*/ext.kotlin_version = "1.9.24"/g' android/build.gradle
           sed -i 's/org.jetbrains.kotlin.android" version .*/org.jetbrains.kotlin.android" version "1.9.24" apply false/g' android/settings.gradle || true
 
-      - name: Inject Android Permissions to prevent crash
+      - name: Write Fresh and Correct AndroidManifest
         run: |
-          PERMISSIONS='<uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />'
-          sed -i "s|<manifest.*>|<manifest xmlns:android=\"http://android.com\">\n    $PERMISSIONS|g" android/app/src/main/AndroidManifest.xml
+          # Ми повністю перезаписуємо маніфест ідеальним кодом із усіма потрібними дозволами
+          cat << 'EOF' > android/app/src/main/AndroidManifest.xml
+          <manifest xmlns:android="http://android.com" package="com.example.lingostream">
+              <uses-permission android:name="android.permission.INTERNET" />
+              <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+              
+              <application
+                  android:label="lingostream"
+                  android:name="${applicationName}"
+                  android:icon="@mipmap/ic_launcher">
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true"
+                      android:launchMode="singleTop"
+                      android:theme="@style/LaunchTheme"
+                      android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+                      android:hardwareAccelerated="true"
+                      android:windowSoftInputMode="adjustResize">
+                      <meta-data
+                        android:name="io.flutter.embedding.android.NormalTheme"
+                        android:resource="@style/NormalTheme" />
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN"/>
+                          <category android:name="android.intent.category.LAUNCHER"/>
+                      </intent-filter>
+                  </activity>
+                  <meta-data
+                      android:name="flutterEmbedding"
+                      android:value="2" />
+              </application>
+          </manifest>
+          EOF
 
       - name: Install dependencies
         run: flutter pub get
