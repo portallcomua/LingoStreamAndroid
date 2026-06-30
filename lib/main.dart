@@ -259,7 +259,12 @@ class _MainDashboardState extends State<MainDashboard> {
     }
   }
 
+  // ===== ChatGPT BEGIN: GitHub update dialog opens latest release =====
   void _showUpdateDialog(String url) {
+    final String releaseUrl = url.trim().isNotEmpty
+        ? url.trim()
+        : 'https://github.com/portallcomua/LingoStreamAndroid/releases/latest';
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -275,8 +280,9 @@ class _MainDashboardState extends State<MainDashboard> {
             style: ElevatedButton.styleFrom(backgroundColor: Colors.cyanAccent),
             onPressed: () async {
               Navigator.pop(context);
-              if (await canLaunchUrl(Uri.parse(url))) {
-                await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+              final Uri uri = Uri.parse(releaseUrl);
+              if (await canLaunchUrl(uri)) {
+                await launchUrl(uri, mode: LaunchMode.externalApplication);
               }
             },
             child: Text(t('update_btn'), style: const TextStyle(color: Colors.black)),
@@ -285,6 +291,7 @@ class _MainDashboardState extends State<MainDashboard> {
       ),
     );
   }
+  // ===== ChatGPT END: GitHub update dialog opens latest release =====
 
   Future<void> _checkForUpdatesManually() async {
     try {
@@ -424,9 +431,16 @@ class _MainDashboardState extends State<MainDashboard> {
       appBar: AppBar(
         title: Row(
           children: [
-            if (MediaService.hasLogo()) 
-              Image.asset('assets/logo.png', height: 30),
+            // ===== ChatGPT BEGIN: safe app logo in header =====
+            Image.asset(
+              'assets/logo.png',
+              height: 30,
+              errorBuilder: (context, error, stackTrace) {
+                return const Text('🛸', style: TextStyle(fontSize: 24));
+              },
+            ),
             const SizedBox(width: 10),
+            // ===== ChatGPT END: safe app logo in header =====
             Text(t('app_title')),
           ],
         ),
@@ -651,13 +665,5 @@ class _MainDashboardState extends State<MainDashboard> {
         ],
       ),
     );
-  }
-}
-
-// ===== Додатковий метод у MediaService для перевірки логотипу =====
-extension MediaServiceExtensions on MediaService {
-  static bool hasLogo() {
-    // Перевіряємо чи існує файл логотипу
-    return true; // Завжди true, щоб не ламати, якщо лого є
   }
 }
