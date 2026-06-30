@@ -35,24 +35,22 @@ jobs:
 
           rm -rf lib
           mv lib_bak lib
+
           rm -rf assets
           mv assets_bak assets || true
+
           mv pubspec.yaml.bak pubspec.yaml
 
-      - name: Force Kotlin and Android Gradle Plugin versions
+      - name: Force Kotlin only
         run: |
           if [ -f android/settings.gradle ]; then
             sed -i 's/id "org.jetbrains.kotlin.android" version "[^"]*"/id "org.jetbrains.kotlin.android" version "1.9.24"/g' android/settings.gradle
             sed -i "s/id 'org.jetbrains.kotlin.android' version '[^']*'/id 'org.jetbrains.kotlin.android' version '1.9.24'/g" android/settings.gradle
-            sed -i 's/id "com.android.application" version "[^"]*"/id "com.android.application" version "8.5.2"/g' android/settings.gradle
-            sed -i "s/id 'com.android.application' version '[^']*'/id 'com.android.application' version '8.5.2'/g" android/settings.gradle
           fi
 
           if [ -f android/build.gradle ]; then
             sed -i 's/ext.kotlin_version = .*/ext.kotlin_version = "1.9.24"/g' android/build.gradle
             sed -i "s/ext.kotlin_version = .*/ext.kotlin_version = '1.9.24'/g" android/build.gradle
-            sed -i 's/com.android.tools.build:gradle:[0-9.]*"/com.android.tools.build:gradle:8.5.2"/g' android/build.gradle
-            sed -i "s/com.android.tools.build:gradle:[0-9.]*/com.android.tools.build:gradle:8.5.2/g" android/build.gradle
           fi
 
       - name: Write correct AndroidManifest
@@ -107,13 +105,8 @@ jobs:
       - name: Build release APK
         run: flutter build apk --release
 
-      - name: Build release AAB
-        run: flutter build appbundle --release
-
-      - name: Upload APK and AAB
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: lingostream-build
-          path: |
-            build/app/outputs/flutter-apk/app-release.apk
-            build/app/outputs/bundle/release/app-release.aab
+          name: lingostream-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
