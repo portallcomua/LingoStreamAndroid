@@ -3,8 +3,7 @@ name: Build LingoStream APK
 on:
   push:
     branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+  workflow_dispatch:
 
 jobs:
   build:
@@ -26,33 +25,36 @@ jobs:
           flutter-version: '3.22.0'
           channel: 'stable'
 
-      - name: Recreate Android Project files safely
+      - name: Recreate Android project safely
         run: |
           cp pubspec.yaml pubspec.yaml.bak
-          flutter create . --platforms=android --project-name=lingostream
+          cp -r lib lib_bak
+          cp -r assets assets_bak || true
+
+          flutter create . --platforms=android --project-name=lingostream --org com.portallcomua
+
+          rm -rf lib
+          mv lib_bak lib
+          rm -rf assets
+          mv assets_bak assets || true
           mv pubspec.yaml.bak pubspec.yaml
 
-      - name: Update Kotlin version for modern packages
+      - name: Write correct AndroidManifest
         run: |
-          sed -i 's/ext.kotlin_version = .*/ext.kotlin_version = "1.9.24"/g' android/build.gradle
-          sed -i 's/org.jetbrains.kotlin.android" version .*/org.jetbrains.kotlin.android" version "1.9.24" apply false/g' android/settings.gradle || true
-
-      - name: Write Fresh and Correct AndroidManifest
-        run: |
-          cat << 'EOF' > android/app/src/main/AndroidManifest.xml
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.example.lingostream">
+          cat > android/app/src/main/AndroidManifest.xml <<'EOF'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
               <uses-permission android:name="android.permission.INTERNET" />
               <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
               <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 
               <application
-                  android:label="lingostream"
+                  android:label="LingoStream"
                   android:name="${applicationName}"
                   android:icon="@mipmap/ic_launcher">
 
                   <meta-data
                       android:name="com.google.android.gms.ads.APPLICATION_ID"
-                      android:value="ca-app-pub-3940256099942544~3347511713"/>
+                      android:value="ca-app-pub-3940256099942544~3347511713" />
 
                   <activity
                       android:name=".MainActivity"
@@ -62,14 +64,17 @@ jobs:
                       android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
                       android:hardwareAccelerated="true"
                       android:windowSoftInputMode="adjustResize">
+
                       <meta-data
-                        android:name="io.flutter.embedding.android.NormalTheme"
-                        android:resource="@style/NormalTheme" />
+                          android:name="io.flutter.embedding.android.NormalTheme"
+                          android:resource="@style/NormalTheme" />
+
                       <intent-filter>
-                          <action android:name="android.intent.action.MAIN"/>
-                          <category android:name="android.intent.category.LAUNCHER"/>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
                       </intent-filter>
                   </activity>
+
                   <meta-data
                       android:name="flutterEmbedding"
                       android:value="2" />
@@ -80,14 +85,19 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Generate proper app icons
+      - name: Generate launcher icons
         run: dart run flutter_launcher_icons
 
-      - name: Build APK
-        run: flutter build apk --debug
+      - name: Build release APK
+        run: flutter build apk --release
 
-      - name: Upload APK Artifact
+      - name: Build release AAB
+        run: flutter build appbundle --release
+
+      - name: Upload APK and AAB
         uses: actions/upload-artifact@v4
         with:
-          name: lingostream-apk
-          path: build/app/outputs/flutter-apk/app-debug.apk
+          name: lingostream-build
+          path: |
+            build/app/outputs/flutter-apk/app-release.apk
+            build/app/outputs/bundle/release/app-release.aab
