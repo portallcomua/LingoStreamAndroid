@@ -37,7 +37,6 @@ jobs:
 
       - name: Inject Android Permissions to prevent crash
         run: |
-          # Додаємо критичні дозволи на інтернет та сервіси у згенерований маніфест
           PERMISSIONS='<uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />'
           sed -i "s|<manifest.*>|<manifest xmlns:android=\"http://android.com\">\n    $PERMISSIONS|g" android/app/src/main/AndroidManifest.xml
 
@@ -46,8 +45,8 @@ jobs:
 
       - name: Generate App Icons
         run: |
-          # Автоматично створюємо іконки з вашого assets/logo.png
-          flutter pub run flutter_launcher_icons
+          # Використовуємо універсальний dart run замінюючи застарілий flutter pub run
+          dart run flutter_launcher_icons
 
       - name: Build APK
         run: flutter build apk --debug
