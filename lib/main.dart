@@ -42,7 +42,7 @@ class _MainDashboardState extends State<MainDashboard> {
       'status_off': 'Перекладач: ВИМКНЕНО',
       'start': 'СТАРТ',
       'stop': 'СТОП',
-      'mode_title': 'Оберіть режим ШІ:',
+      'mode_title': 'Оберіть regime ШІ:',
       'mode_movie': 'Кіно & Серіали',
       'mode_pop': 'Поп-музика',
       'mode_rock': 'Рок (Важкий вокал)',
@@ -123,24 +123,50 @@ class _MainDashboardState extends State<MainDashboard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(isServiceRunning ? t('status_on') : t('status_off'), style: const TextStyle(fontSize: 16)),
+          Text(isServiceRunning ? t('status_on') : t('status_off'), style: const TextStyle(fontSize: 16, color: Colors.white)),
           const SizedBox(height: 25),
-          if (!isPremium) Text('${t('free_limit')} $freeMinutesLeft ${t('min')}'),
+          if (!isPremium) Text('${t('free_limit')} $freeMinutesLeft ${t('min')}', style: const TextStyle(color: Colors.purpleAccent)),
           Expanded(
             child: Center(
               child: ElevatedButton(
-                style: ElevatedButton.styleFrom(shape: const CircleBorder(), padding: const EdgeInsets.all(35)),
+                style: ElevatedButton.styleFrom(
+                  shape: const CircleBorder(), 
+                  padding: const EdgeInsets.all(35),
+                  backgroundColor: isServiceRunning ? Colors.redAccent : Colors.cyanAccent,
+                ),
                 onPressed: () => setState(() => isServiceRunning = !isServiceRunning),
-                child: Icon(isServiceRunning ? Icons.stop : Icons.play_arrow, size: 40),
+                child: Icon(isServiceRunning ? Icons.stop : Icons.play_arrow, size: 40, color: Colors.black),
               ),
             ),
           ),
           Text(t('mode_title'), style: const TextStyle(color: Colors.grey)),
-          RadioListTile(title: Text(t('mode_movie')), value: 'movie', groupValue: selectedMode, onChanged: (v) => setState(() => selectedMode = v.toString())),
-          RadioListTile(title: Text(t('mode_pop')), value: 'pop', groupValue: selectedMode, onChanged: (v) => setState(() => selectedMode = v.toString())),
-          RadioListTile(title: Text(t('mode_rock')), value: 'rock', groupValue: selectedMode, onChanged: (v) {
-            if (!isPremium) { setState(() => _currentTab = 2); } else { setState(() => selectedMode = v.toString()); }
-          }),
+          RadioListTile(
+            title: Text(t('mode_movie'), style: const TextStyle(color: Colors.white)), 
+            value: 'movie', 
+            groupValue: selectedMode, 
+            onChanged: (v) => setState(() => selectedMode = v.toString())
+          ),
+          RadioListTile(
+            title: Text(t('mode_pop'), style: const TextStyle(color: Colors.white)), 
+            value: 'pop', 
+            groupValue: selectedMode, 
+            onChanged: (v) => setState(() => selectedMode = v.toString())
+          ),
+          RadioListTile(
+            title: Text(t('mode_rock'), style: const TextStyle(color: Colors.white)), 
+            value: 'rock', 
+            groupValue: selectedMode, 
+            onChanged: (v) {
+              if (!isPremium) { 
+                setState(() => _currentTab = 2); 
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(currentLanguage == 'UK' ? 'Режим "Рок" доступний лише у Premium підписці!' : 'Rock mode is only available in Premium subscription!')),
+                );
+              } else { 
+                setState(() => selectedMode = v.toString()); 
+              }
+            }
+          ),
         ],
       ),
     );
@@ -152,7 +178,7 @@ class _MainDashboardState extends State<MainDashboard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
           const SizedBox(height: 20),
           const Expanded(child: Center(child: Text('Тут будуть збережені слова', style: TextStyle(color: Colors.grey)))),
         ],
@@ -172,13 +198,30 @@ class _MainDashboardState extends State<MainDashboard> {
           const SizedBox(height: 20),
           TextField(
             controller: _licenseController,
-            decoration: const InputDecoration(filled: true, fillColor: const Color(0xff141414), hintText: 'XXXX-XXXX'),
+            style: const TextStyle(color: Colors.white),
+            decoration: const InputDecoration(
+              filled: true, 
+              fillColor: const Color(0xff141414), 
+              hintText: 'XXXX-XXXX',
+              hintStyle: TextStyle(color: Colors.grey),
+            ),
           ),
           const SizedBox(height: 20),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.purpleAccent),
             onPressed: () {
-              if (_licenseController.text.isNotEmpty) setState(() => isPremium = true);
+              if (_licenseController.text.trim().isNotEmpty) {
+                setState(() {
+                  isPremium = true;
+                });
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(currentLanguage == 'UK' ? 'Premium активовано! 🎸🛸' : 'Premium activated! 🎸🛸'),
+                    backgroundColor: Colors.green,
+                    duration: const Duration(seconds: 3),
+                  ),
+                );
+              }
             },
             child: Text(btn, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ),
