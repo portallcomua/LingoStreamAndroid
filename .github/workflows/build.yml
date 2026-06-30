@@ -12,6 +12,9 @@ jobs:
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
+        with:
+          # Ось цей рядок вирішує проблему з Node.js
+          persist-credentials: false
 
       - name: 🐦 Setup Flutter
         uses: subosito/flutter-action@v2
