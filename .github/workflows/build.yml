@@ -28,8 +28,8 @@ jobs:
 
       - name: Recreate Android Project files
         run: |
-          # Ця команда автоматично перестворить правильну структуру папки android
-          flutter create . --platforms=android
+          # Вказуємо правильну назву проекту в нижньому регістрі через параметр --project-name
+          flutter create . --platforms=android --project-name=lingostream
 
       - name: Install dependencies
         run: flutter pub get
