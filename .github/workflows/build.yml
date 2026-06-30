@@ -1,0 +1,42 @@
+name: Build Clean LingoStream APK
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Set up Flutter SDK
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.22.2'
+          channel: 'stable'
+
+      - name: Compile Isolated Clean App
+        run: |
+          cd ..
+          flutter create --org com.portallcomua --project-name=lingostream isolated_app
+          rm -rf isolated_app/lib/main.dart
+          cp $GITHUB_WORKSPACE/lib/main.dart isolated_app/lib/main.dart
+          cp $GITHUB_WORKSPACE/pubspec.yaml isolated_app/pubspec.yaml
+          cd isolated_app
+          flutter pub get
+          flutter build apk --release
+          cp build/app/outputs/flutter-apk/app-release.apk $GITHUB_WORKSPACE/lingostream-release.apk
+
+      - name: Upload Clean APK to Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: LingoStream-App
+          path: lingostream-release.apk
