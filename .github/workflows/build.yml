@@ -39,6 +39,22 @@ jobs:
           mv assets_bak assets || true
           mv pubspec.yaml.bak pubspec.yaml
 
+      - name: Force Kotlin and Android Gradle Plugin versions
+        run: |
+          if [ -f android/settings.gradle ]; then
+            sed -i 's/id "org.jetbrains.kotlin.android" version "[^"]*"/id "org.jetbrains.kotlin.android" version "1.9.24"/g' android/settings.gradle
+            sed -i "s/id 'org.jetbrains.kotlin.android' version '[^']*'/id 'org.jetbrains.kotlin.android' version '1.9.24'/g" android/settings.gradle
+            sed -i 's/id "com.android.application" version "[^"]*"/id "com.android.application" version "8.5.2"/g' android/settings.gradle
+            sed -i "s/id 'com.android.application' version '[^']*'/id 'com.android.application' version '8.5.2'/g" android/settings.gradle
+          fi
+
+          if [ -f android/build.gradle ]; then
+            sed -i 's/ext.kotlin_version = .*/ext.kotlin_version = "1.9.24"/g' android/build.gradle
+            sed -i "s/ext.kotlin_version = .*/ext.kotlin_version = '1.9.24'/g" android/build.gradle
+            sed -i 's/com.android.tools.build:gradle:[0-9.]*"/com.android.tools.build:gradle:8.5.2"/g' android/build.gradle
+            sed -i "s/com.android.tools.build:gradle:[0-9.]*/com.android.tools.build:gradle:8.5.2/g" android/build.gradle
+          fi
+
       - name: Write correct AndroidManifest
         run: |
           cat > android/app/src/main/AndroidManifest.xml <<'EOF'
