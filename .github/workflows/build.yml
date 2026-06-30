@@ -28,8 +28,15 @@ jobs:
 
       - name: Recreate Android Project files
         run: |
-          # Вказуємо правильну назву проекту в нижньому регістрі через параметр --project-name
+          # Створюємо Android-проект
           flutter create . --platforms=android --project-name=lingostream
+
+      - name: Update Kotlin version for modern packages
+        run: |
+          # Цей крок примусово оновлює версію Kotlin у згенерованому Gradle файлі
+          sed -i 's/ext.kotlin_version = .*/ext.kotlin_version = "1.9.24"/g' android/build.gradle
+          # Оновлюємо версію плагіну Kotlin, якщо структура використовує новий формат
+          sed -i 's/org.jetbrains.kotlin.android" version .*/org.jetbrains.kotlin.android" version "1.9.24" apply false/g' android/settings.gradle || true
 
       - name: Install dependencies
         run: flutter pub get
