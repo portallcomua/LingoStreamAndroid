@@ -1,7 +1,6 @@
 name: lingostream
 description: AI Live Screen Subtitle Translator
 publish_to: "none"
-
 version: 1.0.2+3
 
 environment:
@@ -19,6 +18,12 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  flutter_launcher_icons: ^0.13.1
+
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "assets/logo.png"
 
 flutter:
   uses-material-design: true
