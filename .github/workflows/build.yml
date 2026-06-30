@@ -45,12 +45,6 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Force Install and Run Launcher Icons
-        run: |
-          # Примусово додаємо пакет у глобальний кеш і запускаємо генерацію
-          flutter pub global activate flutter_launcher_icons
-          flutter pub global run flutter_launcher_icons:main
-
       - name: Build APK
         run: flutter build apk --debug
 
