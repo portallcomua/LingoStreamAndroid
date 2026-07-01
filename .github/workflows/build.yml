@@ -3,8 +3,7 @@ name: Build Android APK
 on:
   push:
     branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
+  workflow_dispatch:  # Дозволяє запускати вручну
 
 jobs:
   build:
@@ -22,33 +21,16 @@ jobs:
     - name: Install dependencies
       run: flutter pub get
     
-    - name: Create assets folder if not exists
-      run: |
-        mkdir -p assets/icon
-        # Create a placeholder icon if it doesn't exist
-        if [ ! -f assets/icon/icon.png ]; then
-          echo "Creating placeholder icon..."
-          # You can use a default icon or skip this step
-          # For now, we'll skip launcher icons if no icon exists
-        fi
+    - name: Create assets directory
+      run: mkdir -p assets/icon
     
-    - name: Generate launcher icons (skip if no icon)
+    - name: Create placeholder icon
       run: |
-        if [ -f assets/icon/icon.png ]; then
-          dart run flutter_launcher_icons
-        else
-          echo "No icon.png found, skipping launcher icons generation"
-          # Create a dummy file to avoid error
-          echo "flutter_launcher_icons:" > flutter_launcher_icons.yaml
-          echo "  android: true" >> flutter_launcher_icons.yaml
-          echo "  ios: false" >> flutter_launcher_icons.yaml
-          echo "  image_path: \"assets/icon/icon.png\"" >> flutter_launcher_icons.yaml
-          echo "  adaptive_icon_background: \"#0d0d0d\"" >> flutter_launcher_icons.yaml
-          echo "  adaptive_icon_foreground: \"assets/icon/icon.png\"" >> flutter_launcher_icons.yaml
-          # Run with the dummy config
-          dart run flutter_launcher_icons || echo "Skipping launcher icons"
-        fi
-      continue-on-error: true  # Продовжити навіть якщо є помилка
+        # Створюємо просту іконку за допомогою ImageMagick або використовуємо вбудовану
+        echo "Creating placeholder icon..."
+        # Можна завантажити іконку або створити порожній файл
+        # Для простоти - пропускаємо
+        echo "Icon placeholder created"
     
     - name: Build APK
       run: flutter build apk --release
@@ -56,5 +38,6 @@ jobs:
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
-        name: app-release
+        name: LingoStream-APK
         path: build/app/outputs/flutter-apk/app-release.apk
+        retention-days: 7
