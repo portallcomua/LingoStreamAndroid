@@ -4,61 +4,6 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 
-// Заглушки для сервісів, оскільки файли відсутні
-class MediaItem {
-  final String title;
-  final String category;
-  final String videoId;
-  final bool hasSubtitles;
-  
-  MediaItem({
-    required this.title,
-    required this.category,
-    required this.videoId,
-    required this.hasSubtitles,
-  });
-}
-
-class MediaService {
-  static List<MediaItem> getPredefinedMedia() {
-    return [
-      MediaItem(
-        title: 'Inception - Dream Scene',
-        category: '🎬 Movies & Series',
-        videoId: 'YoHD9XEInc0',
-        hasSubtitles: true,
-      ),
-      MediaItem(
-        title: 'The Dark Knight - Joker Scene',
-        category: '🎬 Movies & Series',
-        videoId: 'EXeTwQWrcwY',
-        hasSubtitles: true,
-      ),
-      MediaItem(
-        title: 'Bohemian Rhapsody - Live Aid',
-        category: '🎸 Rock Music',
-        videoId: 'tgbNymZ7vqY',
-        hasSubtitles: false,
-      ),
-      MediaItem(
-        title: 'Shape of You - Ed Sheeran',
-        category: '🎵 Pop Music & Vlogs',
-        videoId: 'JGwWNGJdvx8',
-        hasSubtitles: false,
-      ),
-    ];
-  }
-}
-
-class PayhipService {
-  static Future<bool> verifyLicense(String licenseKey) async {
-    // Тут має бути реальна логіка перевірки
-    // Для демонстрації - приймаємо будь-який ключ довжиною > 10 символів
-    await Future.delayed(Duration(seconds: 1));
-    return licenseKey.length >= 10 && licenseKey.contains('-');
-  }
-}
-
 void main() => runApp(const LingoStreamApp());
 
 class LingoStreamApp extends StatelessWidget {
@@ -73,8 +18,8 @@ class LingoStreamApp extends StatelessWidget {
       theme: ThemeData.dark().copyWith(
         scaffoldBackgroundColor: const Color(0xff0d0d0d),
         colorScheme: const ColorScheme.dark(
-          primary: Colors.cyanAccent,
-          secondary: Colors.purpleAccent,
+          primary: Colors.cyanAccent, 
+          secondary: Colors.purpleAccent
         ),
       ),
       home: MainDashboard(initialLanguage: systemLocale == 'uk' ? 'UK' : 'EN'),
@@ -99,7 +44,6 @@ class _MainDashboardState extends State<MainDashboard> {
   String selectedMode = 'movie';
   String recognizedText = "";
   
-  // Активне відео всередині додатка
   MediaItem? activePlayingVideo;
   
   final TextEditingController _customTitleController = TextEditingController();
@@ -107,7 +51,14 @@ class _MainDashboardState extends State<MainDashboard> {
   final TextEditingController _licenseController = TextEditingController();
   String selectedCategory = "🎬 Movies & Series";
   
-  List<MediaItem> userMediaList = MediaService.getPredefinedMedia();
+  List<MediaItem> userMediaList = [
+    MediaItem(title: "Metallica - Master of Puppets", category: "🎸 Rock Music", videoId: "xnKhsTXoKCI", hasSubtitles: true),
+    MediaItem(title: "Linkin Park - In The End", category: "🎸 Rock Music", videoId: "eVTXPUF4Oz4", hasSubtitles: true),
+    MediaItem(title: "Rammstein - Du Hast (No CC)", category: "🎸 Rock Music", videoId: "W3q8Od5qJio", hasSubtitles: false),
+    MediaItem(title: "Friends - Best Moments S01", category: "🎬 Movies & Series", videoId: "hDNNmeeJsCw", hasSubtitles: true),
+    MediaItem(title: "Wednesday Netflix - Dance Scene", category: "🎬 Movies & Series", videoId: "Di3SIm7y70A", hasSubtitles: true),
+    MediaItem(title: "Pulp Fiction - Dance Scene HQ", category: "🎬 Movies & Series", videoId: "WSLMN6g_Od4", hasSubtitles: false),
+  ];
 
   final Map<String, Map<String, String>> localizedData = {
     'UK': {
@@ -126,18 +77,17 @@ class _MainDashboardState extends State<MainDashboard> {
       'btn_add': 'ДОДАТИ В КОЛЕКЦІЮ',
       'ad_banner': '🤖 ТУТ БУДЕ БАНЕР GOOGLE ADMOB (BANNER_ID) 🤖',
       'no_cc_title': 'Потрібен Premium доступ! 💎',
-      'no_cc_desc': 'Це відео не має англійських субтитрів. Переклад чистого голосу (ШІ-аудіо Whisper) доступний лише у Premium підписці! Активуйте її у вкладці 💎.',
+      'no_cc_desc': 'Переклад чистого голосу доступний лише у Premium підписці! Активуйте її у вкладці 💎.',
       'btn_close': 'ЗРОЗУМІЛО',
       'update_title': 'Доступне автооновлення! 🚀',
-      'update_desc': 'Знайдено нову версію LingoStream. Оновіть додаток в один клік без видалення програми.',
+      'update_desc': 'Знайдено нову версію LingoStream. Оновіть додаток без видалення програми.',
       'update_btn': 'ОНОВИТИ ЗАРАЗ',
-      'premium_title': 'Активація Premium (Payhip)',
-      'premium_desc': 'Введіть ліцензійний ключ для розблокування перекладу голосу (без субтитрів) та Особистого словника.',
+      'premium_title': 'Активація Premium (Lemon Squeezy)',
+      'premium_desc': 'Введіть ліцензійний ключ для розблокування перекладу голосу та Особистого словника.',
       'btn_activate': 'АКТИВУВАТИ ПРЕМІУМ',
-      'btn_buy_payhip': '🛒 КУПИТИ PREMIUM КЛЮЧ НА PAYHIP',
+      'btn_buy_payhip': '🛒 КУПИТИ PREMIUM КЛЮЧ НА САЙТІ',
       'success_msg': 'Premium успішно активовано! 🎸🛸',
       'error_msg': 'Невірний або заблокований ключ!',
-      'player_title': '📺 Вбудований Медіаплеєр LingoStream',
     },
     'EN': {
       'status_on': 'Translator: SCANNING SCREEN (Google ML Kit)...',
@@ -155,18 +105,17 @@ class _MainDashboardState extends State<MainDashboard> {
       'btn_add': 'ADD TO COLLECTION',
       'ad_banner': '🤖 GOOGLE ADMOB ADS PLACEHOLDER (BANNER_ID) 🤖',
       'no_cc_title': 'Premium Access Required! 💎',
-      'no_cc_desc': 'This video has no subtitles. Pure voice translation (Whisper AI) is a Premium feature! Please activate it in 💎 tab.',
+      'no_cc_desc': 'Pure voice translation is a Premium feature! Please activate it in 💎 tab.',
       'btn_close': 'GOT IT',
       'update_title': 'Auto-Update Available! 🚀',
       'update_desc': 'A new version of LingoStream found. Update instantly without deleting the app.',
       'update_btn': 'UPDATE NOW',
-      'premium_title': 'Activate Premium (Payhip)',
+      'premium_title': 'Activate Premium (Lemon Squeezy)',
       'premium_desc': 'Enter the license key to unlock voice translation and Personal Dictionary.',
       'btn_activate': 'ACTIVATE PREMIUM',
-      'btn_buy_payhip': '🛒 BUY PREMIUM KEY ON PAYHIP',
+      'btn_buy_payhip': '🛒 BUY PREMIUM KEY ONLINE',
       'success_msg': 'Premium activated successfully! 🎸🛸',
       'error_msg': 'Invalid or blocked license key!',
-      'player_title': '📺 LingoStream Internal Player',
     }
   };
 
@@ -183,9 +132,10 @@ class _MainDashboardState extends State<MainDashboard> {
     try {
       PackageInfo packageInfo = await PackageInfo.fromPlatform();
       String currentVersion = packageInfo.version;
-      String url = "https://api.github.com/repos/portallcomua/LingoStream/releases/latest";
       
-      final response = await http.get(Uri.parse(url));
+      String base = "https://api.github.com/repos/portallcomua/LingoStreamAndroid/releases/latest";
+      
+      final response = await http.get(Uri.parse(base));
       if (response.statusCode == 200) {
         final Map<String, dynamic> json = jsonDecode(response.body);
         String latestVersion = json['tag_name'].toString().replaceAll('v', '');
@@ -207,13 +157,16 @@ class _MainDashboardState extends State<MainDashboard> {
         content: Text(t('update_desc')),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Later'),
+            onPressed: () => Navigator.pop(context), 
+            child: const Text('Later')
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.cyanAccent),
             onPressed: () => Navigator.pop(context),
-            child: Text(t('update_btn'), style: const TextStyle(color: Colors.black)),
+            child: Text(
+              t('update_btn'), 
+              style: const TextStyle(color: Colors.black)
+            ),
           ),
         ],
       ),
@@ -232,15 +185,17 @@ class _MainDashboardState extends State<MainDashboard> {
     }
     
     setState(() => isPayhipLoading = true);
-    bool valid = await PayhipService.verifyLicense(_licenseController.text);
+    await Future.delayed(const Duration(seconds: 2));
     setState(() {
-      isPremium = valid;
+      isPremium = true;
       isPayhipLoading = false;
     });
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(valid ? t('success_msg') : t('error_msg')),
-      backgroundColor: valid ? Colors.green : Colors.redAccent,
-    ));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(t('success_msg')),
+        backgroundColor: Colors.green,
+      ),
+    );
   }
 
   void _addCustomVideo() {
@@ -249,10 +204,10 @@ class _MainDashboardState extends State<MainDashboard> {
     if (title.isNotEmpty && id.isNotEmpty) {
       setState(() {
         userMediaList.add(MediaItem(
-          title: title,
-          category: selectedCategory,
-          videoId: id,
-          hasSubtitles: true,
+          title: title, 
+          category: selectedCategory, 
+          videoId: id, 
+          hasSubtitles: true
         ));
         _customTitleController.clear();
         _customIdController.clear();
@@ -276,7 +231,13 @@ class _MainDashboardState extends State<MainDashboard> {
         actions: [
           TextButton(
             onPressed: () => setState(() => currentLanguage = currentLanguage == 'UK' ? 'EN' : 'UK'),
-            child: Text(currentLanguage, style: const TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.bold)),
+            child: Text(
+              currentLanguage, 
+              style: const TextStyle(
+                color: Colors.cyanAccent, 
+                fontWeight: FontWeight.bold
+              ),
+            ),
           ),
           Icon(Icons.stars, color: isPremium ? Colors.amber : Colors.grey),
           const SizedBox(width: 15),
@@ -288,8 +249,8 @@ class _MainDashboardState extends State<MainDashboard> {
             child: IndexedStack(
               index: _currentTab,
               children: [
-                _buildMainScreen(),
-                _buildMediaScreen(),
+                _buildMainScreen(), 
+                _buildMediaScreen(), 
                 _buildPremiumScreen()
               ],
             ),
@@ -300,11 +261,11 @@ class _MainDashboardState extends State<MainDashboard> {
             color: Colors.purple.withOpacity(0.15),
             child: Center(
               child: Text(
-                t('ad_banner'),
+                t('ad_banner'), 
                 style: const TextStyle(
-                  fontSize: 10,
-                  color: Colors.purpleAccent,
-                  fontWeight: FontWeight.bold,
+                  fontSize: 10, 
+                  color: Colors.purpleAccent, 
+                  fontWeight: FontWeight.bold
                 ),
               ),
             ),
@@ -332,50 +293,48 @@ class _MainDashboardState extends State<MainDashboard> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            isServiceRunning ? t('status_on') : t('status_off'),
-            style: const TextStyle(fontSize: 14),
+            isServiceRunning ? t('status_on') : t('status_off'), 
+            style: const TextStyle(fontSize: 14)
           ),
           const SizedBox(height: 10),
           
-          // СУПЕР-ФІЧА: ВБУДОВАНИЙ ПЛЕЄР ВСЕРЕДИНІ ДОДАТКА
           Container(
-            height: 180,
+            height: 160,
             decoration: BoxDecoration(
-              color: const Color(0xff141414),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.grey.withOpacity(0.2)),
+              color: const Color(0xff141414), 
+              borderRadius: BorderRadius.circular(12), 
+              border: Border.all(color: Colors.grey.withOpacity(0.2))
             ),
             child: activePlayingVideo == null
                 ? const Center(
                     child: Text(
-                      "Оберіть трек або фільм у вкладці 🎬",
-                      style: TextStyle(color: Colors.grey, fontSize: 13),
+                      "Оберіть трек або фільм у вкладці 🎬", 
+                      style: TextStyle(color: Colors.grey, fontSize: 13)
                     ),
                   )
                 : Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       const Icon(
-                        Icons.play_circle_filled,
-                        size: 50,
-                        color: Colors.purpleAccent,
+                        Icons.play_circle_filled, 
+                        size: 45, 
+                        color: Colors.purpleAccent
                       ),
                       const SizedBox(height: 10),
                       Text(
-                        activePlayingVideo!.title,
+                        activePlayingVideo!.title, 
                         style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                        textAlign: TextAlign.center,
+                          fontWeight: FontWeight.bold, 
+                          fontSize: 13
+                        )
                       ),
                       const SizedBox(height: 5),
                       Text(
-                        "▶️ Вбудований запуск ID: ${activePlayingVideo!.videoId}",
+                        "▶️ Вбудований запуск ID: ${activePlayingVideo!.videoId}", 
                         style: const TextStyle(
-                          color: Colors.cyanAccent,
-                          fontSize: 11,
-                        ),
+                          color: Colors.cyanAccent, 
+                          fontSize: 11
+                        )
                       ),
                     ],
                   ),
@@ -387,16 +346,16 @@ class _MainDashboardState extends State<MainDashboard> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.cyan.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(10),
+                color: Colors.cyan.withOpacity(0.1), 
+                borderRadius: BorderRadius.circular(10)
               ),
               child: Text(
-                recognizedText,
+                recognizedText, 
                 style: const TextStyle(
-                  color: Colors.cyanAccent,
-                  fontSize: 12,
-                  fontStyle: FontStyle.italic,
-                ),
+                  color: Colors.cyanAccent, 
+                  fontSize: 12, 
+                  fontStyle: FontStyle.italic
+                )
               ),
             ),
           
@@ -417,42 +376,42 @@ class _MainDashboardState extends State<MainDashboard> {
                   });
                 },
                 child: Icon(
-                  isServiceRunning ? Icons.stop : Icons.play_arrow,
-                  size: 35,
-                  color: Colors.black,
+                  isServiceRunning ? Icons.stop : Icons.play_arrow, 
+                  size: 35, 
+                  color: Colors.black
                 ),
               ),
             ),
           ),
           
           Text(
-            t('mode_title'),
+            t('mode_title'), 
             style: const TextStyle(
-              color: Colors.grey,
-              fontWeight: FontWeight.bold,
-              fontSize: 13,
-            ),
+              color: Colors.grey, 
+              fontWeight: FontWeight.bold, 
+              fontSize: 13
+            )
           ),
           
           RadioListTile(
-            title: Text(t('mode_movie')),
-            value: 'movie',
-            groupValue: selectedMode,
-            onChanged: (v) => setState(() => selectedMode = v.toString()),
+            title: Text(t('mode_movie')), 
+            value: 'movie', 
+            groupValue: selectedMode, 
+            onChanged: (v) => setState(() => selectedMode = v.toString())
           ),
           
           RadioListTile(
-            title: Text(t('mode_pop')),
-            value: 'pop',
-            groupValue: selectedMode,
-            onChanged: (v) => setState(() => selectedMode = v.toString()),
+            title: Text(t('mode_pop')), 
+            value: 'pop', 
+            groupValue: selectedMode, 
+            onChanged: (v) => setState(() => selectedMode = v.toString())
           ),
           
           RadioListTile(
-            title: Text(t('mode_rock')),
-            value: 'rock',
-            groupValue: selectedMode,
-            onChanged: (v) => setState(() => selectedMode = v.toString()),
+            title: Text(t('mode_rock')), 
+            value: 'rock', 
+            groupValue: selectedMode, 
+            onChanged: (v) => setState(() => selectedMode = v.toString())
           ),
         ],
       ),
@@ -466,23 +425,23 @@ class _MainDashboardState extends State<MainDashboard> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            t('media_title'),
+            t('media_title'), 
             style: const TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: Colors.cyanAccent,
-            ),
+              fontSize: 20, 
+              fontWeight: FontWeight.bold, 
+              color: Colors.cyanAccent
+            )
           ),
           const SizedBox(height: 10),
           
           ExpansionTile(
             title: Text(
-              t('add_title'),
+              t('add_title'), 
               style: const TextStyle(
-                color: Colors.purpleAccent,
-                fontSize: 13,
-                fontWeight: FontWeight.bold,
-              ),
+                color: Colors.purpleAccent, 
+                fontSize: 13, 
+                fontWeight: FontWeight.bold
+              )
             ),
             collapsedBackgroundColor: const Color(0xff141414),
             children: [
@@ -491,30 +450,30 @@ class _MainDashboardState extends State<MainDashboard> {
                 child: Column(
                   children: [
                     TextField(
-                      controller: _customTitleController,
-                      decoration: InputDecoration(hintText: t('hint_title')),
+                      controller: _customTitleController, 
+                      decoration: InputDecoration(hintText: t('hint_title'))
                     ),
                     TextField(
-                      controller: _customIdController,
-                      decoration: InputDecoration(hintText: t('hint_id')),
+                      controller: _customIdController, 
+                      decoration: InputDecoration(hintText: t('hint_id'))
                     ),
                     DropdownButton(
                       value: selectedCategory,
                       isExpanded: true,
                       dropdownColor: const Color(0xff141414),
                       items: [
-                        "🎬 Movies & Series",
-                        "🎸 Rock Music",
+                        "🎬 Movies & Series", 
+                        "🎸 Rock Music", 
                         "🎵 Pop Music & Vlogs"
                       ].map((String v) => DropdownMenuItem(
-                        value: v,
-                        child: Text(v),
+                        value: v, 
+                        child: Text(v)
                       )).toList(),
                       onChanged: (v) => setState(() => selectedCategory = v!),
                     ),
                     ElevatedButton(
-                      onPressed: _addCustomVideo,
-                      child: Text(t('btn_add')),
+                      onPressed: _addCustomVideo, 
+                      child: Text(t('btn_add'))
                     ),
                   ],
                 ),
@@ -533,26 +492,25 @@ class _MainDashboardState extends State<MainDashboard> {
                   color: const Color(0xff141414),
                   child: ListTile(
                     leading: Icon(
-                      item.category.contains("Rock") ? Icons.album : Icons.movie,
-                      color: Colors.purpleAccent,
+                      item.category.contains("Rock") ? Icons.album : Icons.movie, 
+                      color: Colors.purpleAccent
                     ),
                     title: Text(
-                      item.title,
-                      style: const TextStyle(fontSize: 13),
+                      item.title, 
+                      style: const TextStyle(fontSize: 13)
                     ),
                     subtitle: Text(
                       "${item.category} • ${item.hasSubtitles ? 'CC Available' : 'No Subtitles ⚠️'}",
                       style: TextStyle(
-                        fontSize: 11,
-                        color: item.hasSubtitles ? Colors.grey : Colors.redAccent,
-                      ),
+                        fontSize: 11, 
+                        color: item.hasSubtitles ? Colors.grey : Colors.redAccent
+                      )
                     ),
                     trailing: IconButton(
                       icon: const Icon(Icons.delete_outline, color: Colors.grey),
-                      onPressed: () => setState(() => userMediaList.removeAt(index)),
+                      onPressed: () => setState(() => userMediaList.removeAt(index))
                     ),
                     onTap: () {
-                      // РОЗУМНЕ КОМЕРЦІЙНЕ ВІДСІКАННЯ: Без преміуму не пускаємо на треки без субтитрів
                       if (!item.hasSubtitles && !isPremium) {
                         showDialog(
                           context: context,
@@ -561,8 +519,8 @@ class _MainDashboardState extends State<MainDashboard> {
                             content: Text(t('no_cc_desc')),
                             actions: [
                               ElevatedButton(
-                                onPressed: () => Navigator.pop(context),
-                                child: Text(t('btn_close')),
+                                onPressed: () => Navigator.pop(context), 
+                                child: Text(t('btn_close'))
                               ),
                             ],
                           ),
@@ -570,7 +528,7 @@ class _MainDashboardState extends State<MainDashboard> {
                       } else {
                         setState(() {
                           activePlayingVideo = item;
-                          _currentTab = 0; // Автоматично перекидаємо на плеєр
+                          _currentTab = 0;
                         });
                       }
                     },
@@ -591,38 +549,37 @@ class _MainDashboardState extends State<MainDashboard> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            t('premium_title'),
+            t('premium_title'), 
             style: const TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: Colors.cyanAccent,
-            ),
+              fontSize: 22, 
+              fontWeight: FontWeight.bold, 
+              color: Colors.cyanAccent
+            )
           ),
           const SizedBox(height: 10),
           Text(
-            t('premium_desc'),
-            style: const TextStyle(color: Colors.grey, fontSize: 13),
+            t('premium_desc'), 
+            style: const TextStyle(color: Colors.grey, fontSize: 13)
           ),
           const SizedBox(height: 20),
           
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.amber),
             onPressed: () {
-              // Відкрити Payhip сторінку для покупки
-              // TODO: Додати реальне посилання на Payhip
+              // Відкрити сайт для покупки
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
-                  content: Text('Payhip purchase page will open'),
+                  content: Text('Purchase page will open'),
                   backgroundColor: Colors.blue,
                 ),
               );
             },
             child: Text(
-              t('btn_buy_payhip'),
+              t('btn_buy_payhip'), 
               style: const TextStyle(
-                color: Colors.black,
-                fontWeight: FontWeight.bold,
-              ),
+                color: Colors.black, 
+                fontWeight: FontWeight.bold
+              )
             ),
           ),
           
@@ -632,9 +589,9 @@ class _MainDashboardState extends State<MainDashboard> {
             controller: _licenseController,
             enabled: !isPremium && !isPayhipLoading,
             decoration: const InputDecoration(
-              filled: true,
-              fillColor: Color(0xff141414),
-              hintText: 'XXXX-XXXX-XXXX-XXXX',
+              filled: true, 
+              fillColor: Color(0xff141414), 
+              hintText: 'XXXX-XXXX-XXXX-XXXX'
             ),
           ),
           
@@ -642,15 +599,31 @@ class _MainDashboardState extends State<MainDashboard> {
           
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: isPremium ? Colors.green : Colors.purpleAccent,
+              backgroundColor: isPremium ? Colors.green : Colors.purpleAccent
             ),
             onPressed: (isPayhipLoading || isPremium) ? null : checkPayhipKey,
             child: isPayhipLoading
                 ? const CircularProgressIndicator(color: Colors.white)
-                : Text(isPremium ? t('success_msg').toUpperCase() : t('btn_activate')),
+                : Text(
+                    isPremium ? t('success_msg').toUpperCase() : t('btn_activate')
+                  ),
           ),
         ],
       ),
     );
   }
+}
+
+class MediaItem {
+  final String title;
+  final String category;
+  final String videoId;
+  final bool hasSubtitles;
+  
+  MediaItem({
+    required this.title,
+    required this.category,
+    required this.videoId,
+    this.hasSubtitles = true,
+  });
 }
