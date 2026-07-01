@@ -3,7 +3,7 @@ name: Build Android APK
 on:
   push:
     branches: [ main, master ]
-  workflow_dispatch:  # Дозволяє запускати вручну
+  workflow_dispatch:
 
 jobs:
   build:
@@ -20,17 +20,6 @@ jobs:
     
     - name: Install dependencies
       run: flutter pub get
-    
-    - name: Create assets directory
-      run: mkdir -p assets/icon
-    
-    - name: Create placeholder icon
-      run: |
-        # Створюємо просту іконку за допомогою ImageMagick або використовуємо вбудовану
-        echo "Creating placeholder icon..."
-        # Можна завантажити іконку або створити порожній файл
-        # Для простоти - пропускаємо
-        echo "Icon placeholder created"
     
     - name: Build APK
       run: flutter build apk --release
