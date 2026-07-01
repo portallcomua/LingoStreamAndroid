@@ -9,22 +9,20 @@ dependencies:
   flutter:
     sdk: flutter
   
+  # Для HTTP запитів
   http: ^1.1.0
+  
+  # Для отримання версії додатку
   package_info_plus: ^4.0.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.0
-  flutter_launcher_icons: ^0.13.1
 
 flutter:
   uses-material-design: true
 
-flutter_launcher_icons:
-  android: true
-  ios: false  # Вимкнути iOS, якщо немає iOS папки
-  image_path: "assets/icon/icon.png"
-  adaptive_icon_background: "#0d0d0d"
-  adaptive_icon_foreground: "assets/icon/icon.png"
-  remove_alpha_ios: true
+  # Додаємо іконку в ресурси
+  assets:
+    - assets/icon/
