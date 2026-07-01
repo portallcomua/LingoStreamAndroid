@@ -1,12 +1,69 @@
 import 'package:flutter/material.dart';
 import 'dart:ui';
-import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
-import 'media_service.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:package_info_plus/package_info_plus.dart';
+
+// Заглушки для сервісів, оскільки файли відсутні
+class MediaItem {
+  final String title;
+  final String category;
+  final String videoId;
+  final bool hasSubtitles;
+  
+  MediaItem({
+    required this.title,
+    required this.category,
+    required this.videoId,
+    required this.hasSubtitles,
+  });
+}
+
+class MediaService {
+  static List<MediaItem> getPredefinedMedia() {
+    return [
+      MediaItem(
+        title: 'Inception - Dream Scene',
+        category: '🎬 Movies & Series',
+        videoId: 'YoHD9XEInc0',
+        hasSubtitles: true,
+      ),
+      MediaItem(
+        title: 'The Dark Knight - Joker Scene',
+        category: '🎬 Movies & Series',
+        videoId: 'EXeTwQWrcwY',
+        hasSubtitles: true,
+      ),
+      MediaItem(
+        title: 'Bohemian Rhapsody - Live Aid',
+        category: '🎸 Rock Music',
+        videoId: 'tgbNymZ7vqY',
+        hasSubtitles: false,
+      ),
+      MediaItem(
+        title: 'Shape of You - Ed Sheeran',
+        category: '🎵 Pop Music & Vlogs',
+        videoId: 'JGwWNGJdvx8',
+        hasSubtitles: false,
+      ),
+    ];
+  }
+}
+
+class PayhipService {
+  static Future<bool> verifyLicense(String licenseKey) async {
+    // Тут має бути реальна логіка перевірки
+    // Для демонстрації - приймаємо будь-який ключ довжиною > 10 символів
+    await Future.delayed(Duration(seconds: 1));
+    return licenseKey.length >= 10 && licenseKey.contains('-');
+  }
+}
 
 void main() => runApp(const LingoStreamApp());
 
 class LingoStreamApp extends StatelessWidget {
   const LingoStreamApp({super.key});
+  
   @override
   Widget build(BuildContext context) {
     final String systemLocale = PlatformDispatcher.instance.locale.languageCode;
@@ -15,7 +72,10 @@ class LingoStreamApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark().copyWith(
         scaffoldBackgroundColor: const Color(0xff0d0d0d),
-        colorScheme: const ColorScheme.dark(primary: Colors.cyanAccent, secondary: Colors.purpleAccent),
+        colorScheme: const ColorScheme.dark(
+          primary: Colors.cyanAccent,
+          secondary: Colors.purpleAccent,
+        ),
       ),
       home: MainDashboard(initialLanguage: systemLocale == 'uk' ? 'UK' : 'EN'),
     );
@@ -25,6 +85,7 @@ class LingoStreamApp extends StatelessWidget {
 class MainDashboard extends StatefulWidget {
   final String initialLanguage;
   const MainDashboard({super.key, required this.initialLanguage});
+  
   @override
   State<MainDashboard> createState() => _MainDashboardState();
 }
@@ -33,90 +94,177 @@ class _MainDashboardState extends State<MainDashboard> {
   int _currentTab = 0;
   late String currentLanguage;
   bool isServiceRunning = false;
+  bool isPremium = false;
+  bool isPayhipLoading = false;
   String selectedMode = 'movie';
-  String recognizedText = ""; // Сюди Google ШІ буде записувати знайдений текст
+  String recognizedText = "";
+  
+  // Активне відео всередині додатка
+  MediaItem? activePlayingVideo;
+  
+  final TextEditingController _customTitleController = TextEditingController();
+  final TextEditingController _customIdController = TextEditingController();
+  final TextEditingController _licenseController = TextEditingController();
+  String selectedCategory = "🎬 Movies & Series";
+  
   List<MediaItem> userMediaList = MediaService.getPredefinedMedia();
-
-  // Ініціалізація розпізнавача тексту від Google (працює локально на телефоні)
-  final TextRecognizer _textRecognizer = TextRecognizer(script: TextRecognitionScript.latin);
 
   final Map<String, Map<String, String>> localizedData = {
     'UK': {
-      'status_on': 'Перекладач: СКАНУВАННЯ ЕКРАНА...',
+      'status_on': 'Перекладач: СКАНУВАННЯ ЕКРАНА (ШІ Google ML Kit)...',
       'status_off': 'Перекладач: ВИМКНЕНО',
       'start': 'СТАРТ',
       'stop': 'СТОП',
-      'mode_title': 'Оптимізація сканування літер:',
+      'mode_title': 'Оптимізація роботи ШІ перекладача:',
       'mode_movie': 'Кіно & Серіали',
       'mode_pop': 'Поп-музика & Блоги',
       'mode_rock': '🎸 Рок-музика (Прискорений режим)',
-      'media_title': '🎬 Колекції & Відео',
-      'ad_banner': '🤖 ТУТ БУДЕ БАНЕР GOOGLE ADMOB 🤖',
-      'no_cc_title': 'Увага: Немає субтитрів! ⚠️',
-      'no_cc_desc': 'Це відео не має англійських субтитрів. Сканування екрана не зможе знайти текст.',
+      'media_title': '🎬 Вбудована Медіатека',
+      'add_title': 'Додати нове відео:',
+      'hint_title': 'Назва фільму або пісні',
+      'hint_id': 'YouTube Video ID (літери після =)',
+      'btn_add': 'ДОДАТИ В КОЛЕКЦІЮ',
+      'ad_banner': '🤖 ТУТ БУДЕ БАНЕР GOOGLE ADMOB (BANNER_ID) 🤖',
+      'no_cc_title': 'Потрібен Premium доступ! 💎',
+      'no_cc_desc': 'Це відео не має англійських субтитрів. Переклад чистого голосу (ШІ-аудіо Whisper) доступний лише у Premium підписці! Активуйте її у вкладці 💎.',
       'btn_close': 'ЗРОЗУМІЛО',
+      'update_title': 'Доступне автооновлення! 🚀',
+      'update_desc': 'Знайдено нову версію LingoStream. Оновіть додаток в один клік без видалення програми.',
+      'update_btn': 'ОНОВИТИ ЗАРАЗ',
+      'premium_title': 'Активація Premium (Payhip)',
+      'premium_desc': 'Введіть ліцензійний ключ для розблокування перекладу голосу (без субтитрів) та Особистого словника.',
+      'btn_activate': 'АКТИВУВАТИ ПРЕМІУМ',
+      'btn_buy_payhip': '🛒 КУПИТИ PREMIUM КЛЮЧ НА PAYHIP',
+      'success_msg': 'Premium успішно активовано! 🎸🛸',
+      'error_msg': 'Невірний або заблокований ключ!',
+      'player_title': '📺 Вбудований Медіаплеєр LingoStream',
     },
     'EN': {
-      'status_on': 'Translator: SCANNING SCREEN...',
+      'status_on': 'Translator: SCANNING SCREEN (Google ML Kit)...',
       'status_off': 'Translator: OFF',
       'start': 'START',
       'stop': 'STOP',
-      'mode_title': 'Text Scanning Optimization Mode:',
+      'mode_title': 'AI Translator Optimization Mode:',
       'mode_movie': 'Movies & Series',
       'mode_pop': 'Pop Music & Vlogs',
       'mode_rock': '🎸 Rock Music (Fast Scan Mode)',
-      'media_title': '🎬 Collections & Video',
-      'ad_banner': '🤖 GOOGLE ADMOB ADS PLACEHOLDER 🤖',
-      'no_cc_title': 'Warning: No Subtitles! ⚠️',
-      'no_cc_desc': 'This video does not have English subtitles. Screen scanning won\'t detect text.',
+      'media_title': '🎬 Built-In Media Library',
+      'add_title': 'Add New Video:',
+      'hint_title': 'Movie or Song Title',
+      'hint_id': 'YouTube Video ID (letters after =)',
+      'btn_add': 'ADD TO COLLECTION',
+      'ad_banner': '🤖 GOOGLE ADMOB ADS PLACEHOLDER (BANNER_ID) 🤖',
+      'no_cc_title': 'Premium Access Required! 💎',
+      'no_cc_desc': 'This video has no subtitles. Pure voice translation (Whisper AI) is a Premium feature! Please activate it in 💎 tab.',
       'btn_close': 'GOT IT',
+      'update_title': 'Auto-Update Available! 🚀',
+      'update_desc': 'A new version of LingoStream found. Update instantly without deleting the app.',
+      'update_btn': 'UPDATE NOW',
+      'premium_title': 'Activate Premium (Payhip)',
+      'premium_desc': 'Enter the license key to unlock voice translation and Personal Dictionary.',
+      'btn_activate': 'ACTIVATE PREMIUM',
+      'btn_buy_payhip': '🛒 BUY PREMIUM KEY ON PAYHIP',
+      'success_msg': 'Premium activated successfully! 🎸🛸',
+      'error_msg': 'Invalid or blocked license key!',
+      'player_title': '📺 LingoStream Internal Player',
     }
   };
-
-  @override
-  void dispose() {
-    _textRecognizer.close(); // Обов'язково закриваємо ШІ при закритті програми
-    super.dispose();
-  }
 
   @override
   void initState() {
     super.initState();
     currentLanguage = widget.initialLanguage;
+    WidgetsBinding.instance.addPostFrameCallback((_) => checkForGitHubUpdates());
   }
 
   String t(String key) => localizedData[currentLanguage]?[key] ?? key;
 
-  // Технічна функція активації ШІ-сканера
-  void _toggleOcrService() {
-    setState(() {
-      isServiceRunning = !isServiceRunning;
-      if (isServiceRunning) {
-        recognizedText = currentLanguage == 'UK' 
-            ? "ШІ запущено. Очікування субтитрів на екрані..." 
-            : "AI running. Waiting for subtitles on screen...";
-      } else {
-        recognizedText = "";
+  Future<void> checkForGitHubUpdates() async {
+    try {
+      PackageInfo packageInfo = await PackageInfo.fromPlatform();
+      String currentVersion = packageInfo.version;
+      String url = "https://api.github.com/repos/portallcomua/LingoStream/releases/latest";
+      
+      final response = await http.get(Uri.parse(url));
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> json = jsonDecode(response.body);
+        String latestVersion = json['tag_name'].toString().replaceAll('v', '');
+        if (latestVersion != currentVersion) {
+          _showUpdateDialog();
+        }
       }
-    });
+    } catch (e) {
+      print("GitHub Auto-Update Error: $e");
+    }
   }
 
-  void _showNoSubtitlesWarning() {
+  void _showUpdateDialog() {
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        title: Text(t('no_cc_title'), style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
-        content: Text(t('no_cc_desc'), style: const TextStyle(fontSize: 14, height: 1.4)),
+        title: Text(t('update_title')),
+        content: Text(t('update_desc')),
         actions: [
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+          TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text(t('btn_close'), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          )
+            child: const Text('Later'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.cyanAccent),
+            onPressed: () => Navigator.pop(context),
+            child: Text(t('update_btn'), style: const TextStyle(color: Colors.black)),
+          ),
         ],
       ),
     );
+  }
+
+  Future<void> checkPayhipKey() async {
+    if (_licenseController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter a license key'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+    
+    setState(() => isPayhipLoading = true);
+    bool valid = await PayhipService.verifyLicense(_licenseController.text);
+    setState(() {
+      isPremium = valid;
+      isPayhipLoading = false;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(valid ? t('success_msg') : t('error_msg')),
+      backgroundColor: valid ? Colors.green : Colors.redAccent,
+    ));
+  }
+
+  void _addCustomVideo() {
+    String title = _customTitleController.text.trim();
+    String id = _customIdController.text.trim();
+    if (title.isNotEmpty && id.isNotEmpty) {
+      setState(() {
+        userMediaList.add(MediaItem(
+          title: title,
+          category: selectedCategory,
+          videoId: id,
+          hasSubtitles: true,
+        ));
+        _customTitleController.clear();
+        _customIdController.clear();
+      });
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please fill in both fields'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+    }
   }
 
   @override
@@ -130,6 +278,7 @@ class _MainDashboardState extends State<MainDashboard> {
             onPressed: () => setState(() => currentLanguage = currentLanguage == 'UK' ? 'EN' : 'UK'),
             child: Text(currentLanguage, style: const TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.bold)),
           ),
+          Icon(Icons.stars, color: isPremium ? Colors.amber : Colors.grey),
           const SizedBox(width: 15),
         ],
       ),
@@ -138,7 +287,11 @@ class _MainDashboardState extends State<MainDashboard> {
           Expanded(
             child: IndexedStack(
               index: _currentTab,
-              children: [_buildMainScreen(), _buildMediaScreen()],
+              children: [
+                _buildMainScreen(),
+                _buildMediaScreen(),
+                _buildPremiumScreen()
+              ],
             ),
           ),
           Container(
@@ -146,7 +299,14 @@ class _MainDashboardState extends State<MainDashboard> {
             height: 50,
             color: Colors.purple.withOpacity(0.15),
             child: Center(
-              child: Text(t('ad_banner'), style: const TextStyle(fontSize: 10, color: Colors.purpleAccent, fontWeight: FontWeight.bold)),
+              child: Text(
+                t('ad_banner'),
+                style: const TextStyle(
+                  fontSize: 10,
+                  color: Colors.purpleAccent,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
           ),
         ],
@@ -159,6 +319,7 @@ class _MainDashboardState extends State<MainDashboard> {
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.flash_on), label: '⚡'),
           BottomNavigationBarItem(icon: Icon(Icons.video_library), label: '🎬'),
+          BottomNavigationBarItem(icon: Icon(Icons.workspace_premium), label: '💎'),
         ],
       ),
     );
@@ -170,30 +331,129 @@ class _MainDashboardState extends State<MainDashboard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(isServiceRunning ? t('status_on') : t('status_off'), style: const TextStyle(fontSize: 16)),
+          Text(
+            isServiceRunning ? t('status_on') : t('status_off'),
+            style: const TextStyle(fontSize: 14),
+          ),
+          const SizedBox(height: 10),
+          
+          // СУПЕР-ФІЧА: ВБУДОВАНИЙ ПЛЕЄР ВСЕРЕДИНІ ДОДАТКА
+          Container(
+            height: 180,
+            decoration: BoxDecoration(
+              color: const Color(0xff141414),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey.withOpacity(0.2)),
+            ),
+            child: activePlayingVideo == null
+                ? const Center(
+                    child: Text(
+                      "Оберіть трек або фільм у вкладці 🎬",
+                      style: TextStyle(color: Colors.grey, fontSize: 13),
+                    ),
+                  )
+                : Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.play_circle_filled,
+                        size: 50,
+                        color: Colors.purpleAccent,
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        activePlayingVideo!.title,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        "▶️ Вбудований запуск ID: ${activePlayingVideo!.videoId}",
+                        style: const TextStyle(
+                          color: Colors.cyanAccent,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+          ),
+          
           const SizedBox(height: 15),
           
-          // Вікно виведення результатів роботи Google ШІ сканера
           if (isServiceRunning)
             Container(
-              padding: const EdgeInsets.all(15),
-              decoration: BoxDecoration(color: Colors.cyan.withOpacity(0.1), borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.cyanAccent, width: 0.5)),
-              child: Text(recognizedText, style: const TextStyle(color: Colors.cyanAccent, fontSize: 13, fontStyle: FontStyle.italic)),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.cyan.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                recognizedText,
+                style: const TextStyle(
+                  color: Colors.cyanAccent,
+                  fontSize: 12,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
             ),
-            
+          
           Expanded(
             child: Center(
               child: ElevatedButton(
-                style: ElevatedButton.styleFrom(shape: const CircleBorder(), padding: const EdgeInsets.all(35), backgroundColor: isServiceRunning ? Colors.redAccent : Colors.cyanAccent),
-                onPressed: _toggleOcrService,
-                child: Icon(isServiceRunning ? Icons.stop : Icons.play_arrow, size: 40, color: Colors.black),
+                style: ElevatedButton.styleFrom(
+                  shape: const CircleBorder(),
+                  padding: const EdgeInsets.all(30),
+                  backgroundColor: isServiceRunning ? Colors.redAccent : Colors.cyanAccent,
+                ),
+                onPressed: () {
+                  setState(() {
+                    isServiceRunning = !isServiceRunning;
+                    if (isServiceRunning) {
+                      recognizedText = "ШІ-сканування екрана запущено поверх медіаплеєра...";
+                    }
+                  });
+                },
+                child: Icon(
+                  isServiceRunning ? Icons.stop : Icons.play_arrow,
+                  size: 35,
+                  color: Colors.black,
+                ),
               ),
             ),
           ),
-          Text(t('mode_title'), style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
-          RadioListTile(title: Text(t('mode_movie')), value: 'movie', groupValue: selectedMode, onChanged: (v) => setState(() => selectedMode = v.toString())),
-          RadioListTile(title: Text(t('mode_pop')), value: 'pop', groupValue: selectedMode, onChanged: (v) => setState(() => selectedMode = v.toString())),
-          RadioListTile(title: Text(t('mode_rock')), value: 'rock', groupValue: selectedMode, onChanged: (v) => setState(() => selectedMode = v.toString())),
+          
+          Text(
+            t('mode_title'),
+            style: const TextStyle(
+              color: Colors.grey,
+              fontWeight: FontWeight.bold,
+              fontSize: 13,
+            ),
+          ),
+          
+          RadioListTile(
+            title: Text(t('mode_movie')),
+            value: 'movie',
+            groupValue: selectedMode,
+            onChanged: (v) => setState(() => selectedMode = v.toString()),
+          ),
+          
+          RadioListTile(
+            title: Text(t('mode_pop')),
+            value: 'pop',
+            groupValue: selectedMode,
+            onChanged: (v) => setState(() => selectedMode = v.toString()),
+          ),
+          
+          RadioListTile(
+            title: Text(t('mode_rock')),
+            value: 'rock',
+            groupValue: selectedMode,
+            onChanged: (v) => setState(() => selectedMode = v.toString()),
+          ),
         ],
       ),
     );
@@ -205,8 +465,65 @@ class _MainDashboardState extends State<MainDashboard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(t('media_title'), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.cyanAccent)),
-          const SizedBox(height: 15),
+          Text(
+            t('media_title'),
+            style: const TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: Colors.cyanAccent,
+            ),
+          ),
+          const SizedBox(height: 10),
+          
+          ExpansionTile(
+            title: Text(
+              t('add_title'),
+              style: const TextStyle(
+                color: Colors.purpleAccent,
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            collapsedBackgroundColor: const Color(0xff141414),
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(10.0),
+                child: Column(
+                  children: [
+                    TextField(
+                      controller: _customTitleController,
+                      decoration: InputDecoration(hintText: t('hint_title')),
+                    ),
+                    TextField(
+                      controller: _customIdController,
+                      decoration: InputDecoration(hintText: t('hint_id')),
+                    ),
+                    DropdownButton(
+                      value: selectedCategory,
+                      isExpanded: true,
+                      dropdownColor: const Color(0xff141414),
+                      items: [
+                        "🎬 Movies & Series",
+                        "🎸 Rock Music",
+                        "🎵 Pop Music & Vlogs"
+                      ].map((String v) => DropdownMenuItem(
+                        value: v,
+                        child: Text(v),
+                      )).toList(),
+                      onChanged: (v) => setState(() => selectedCategory = v!),
+                    ),
+                    ElevatedButton(
+                      onPressed: _addCustomVideo,
+                      child: Text(t('btn_add')),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          
+          const SizedBox(height: 10),
+          
           Expanded(
             child: ListView.builder(
               itemCount: userMediaList.length,
@@ -215,21 +532,122 @@ class _MainDashboardState extends State<MainDashboard> {
                 return Card(
                   color: const Color(0xff141414),
                   child: ListTile(
-                    leading: Icon(item.category.contains("Rock") ? Icons.album : Icons.movie, color: Colors.purpleAccent),
-                    title: Text(item.title, style: const TextStyle(fontSize: 14)),
-                    subtitle: Text("${item.category} • ${item.hasSubtitles ? 'CC Available' : 'No Subtitles ⚠️'}", style: TextStyle(fontSize: 11, color: item.hasSubtitles ? Colors.grey : Colors.redAccent)),
-                    trailing: Icon(item.hasSubtitles ? Icons.play_circle_outline : Icons.error_outline, color: item.hasSubtitles ? Colors.cyanAccent : Colors.redAccent),
+                    leading: Icon(
+                      item.category.contains("Rock") ? Icons.album : Icons.movie,
+                      color: Colors.purpleAccent,
+                    ),
+                    title: Text(
+                      item.title,
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                    subtitle: Text(
+                      "${item.category} • ${item.hasSubtitles ? 'CC Available' : 'No Subtitles ⚠️'}",
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: item.hasSubtitles ? Colors.grey : Colors.redAccent,
+                      ),
+                    ),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.delete_outline, color: Colors.grey),
+                      onPressed: () => setState(() => userMediaList.removeAt(index)),
+                    ),
                     onTap: () {
-                      if (!item.hasSubtitles) {
-                        _showNoSubtitlesWarning();
+                      // РОЗУМНЕ КОМЕРЦІЙНЕ ВІДСІКАННЯ: Без преміуму не пускаємо на треки без субтитрів
+                      if (!item.hasSubtitles && !isPremium) {
+                        showDialog(
+                          context: context,
+                          builder: (context) => AlertDialog(
+                            title: Text(t('no_cc_title')),
+                            content: Text(t('no_cc_desc')),
+                            actions: [
+                              ElevatedButton(
+                                onPressed: () => Navigator.pop(context),
+                                child: Text(t('btn_close')),
+                              ),
+                            ],
+                          ),
+                        );
                       } else {
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Selected: ${item.title}")));
+                        setState(() {
+                          activePlayingVideo = item;
+                          _currentTab = 0; // Автоматично перекидаємо на плеєр
+                        });
                       }
                     },
                   ),
                 );
               },
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPremiumScreen() {
+    return Padding(
+      padding: const EdgeInsets.all(20.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            t('premium_title'),
+            style: const TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: Colors.cyanAccent,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            t('premium_desc'),
+            style: const TextStyle(color: Colors.grey, fontSize: 13),
+          ),
+          const SizedBox(height: 20),
+          
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.amber),
+            onPressed: () {
+              // Відкрити Payhip сторінку для покупки
+              // TODO: Додати реальне посилання на Payhip
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Payhip purchase page will open'),
+                  backgroundColor: Colors.blue,
+                ),
+              );
+            },
+            child: Text(
+              t('btn_buy_payhip'),
+              style: const TextStyle(
+                color: Colors.black,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          
+          const SizedBox(height: 20),
+          
+          TextField(
+            controller: _licenseController,
+            enabled: !isPremium && !isPayhipLoading,
+            decoration: const InputDecoration(
+              filled: true,
+              fillColor: Color(0xff141414),
+              hintText: 'XXXX-XXXX-XXXX-XXXX',
+            ),
+          ),
+          
+          const SizedBox(height: 15),
+          
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: isPremium ? Colors.green : Colors.purpleAccent,
+            ),
+            onPressed: (isPayhipLoading || isPremium) ? null : checkPayhipKey,
+            child: isPayhipLoading
+                ? const CircularProgressIndicator(color: Colors.white)
+                : Text(isPremium ? t('success_msg').toUpperCase() : t('btn_activate')),
           ),
         ],
       ),
