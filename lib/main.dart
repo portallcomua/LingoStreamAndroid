@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'dart:ui';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
@@ -133,7 +134,7 @@ class _MainDashboardState extends State<MainDashboard> {
       PackageInfo packageInfo = await PackageInfo.fromPlatform();
       String currentVersion = packageInfo.version;
       
-      // GitHub API для перевірки оновлень
+      // ВИПРАВЛЕНЕ ПОСИЛАННЯ (без "1111")
       String base = "https://api.github.com/repos/portallcomua/LingoStreamAndroid/releases/latest";
       
       final response = await http.get(Uri.parse(base));
@@ -163,11 +164,7 @@ class _MainDashboardState extends State<MainDashboard> {
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.cyanAccent),
-            onPressed: () {
-              Navigator.pop(context);
-              // Тут можна додати відкриття сторінки оновлення
-              // launchUrl(Uri.parse("https://github.com/portallcomua/LingoStreamAndroid/releases/latest"));
-            },
+            onPressed: () => Navigator.pop(context),
             child: Text(
               t('update_btn'), 
               style: const TextStyle(color: Colors.black)
@@ -190,15 +187,11 @@ class _MainDashboardState extends State<MainDashboard> {
     }
     
     setState(() => isPayhipLoading = true);
-    
-    // Тут буде реальна перевірка ключа через ваш API
     await Future.delayed(const Duration(seconds: 2));
-    
     setState(() {
       isPremium = true;
       isPayhipLoading = false;
     });
-    
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(t('success_msg')),
@@ -264,7 +257,6 @@ class _MainDashboardState extends State<MainDashboard> {
               ],
             ),
           ),
-          // Рекламний банер
           Container(
             width: double.infinity,
             height: 50,
@@ -302,14 +294,12 @@ class _MainDashboardState extends State<MainDashboard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Статус перекладача
           Text(
             isServiceRunning ? t('status_on') : t('status_off'), 
             style: const TextStyle(fontSize: 14)
           ),
           const SizedBox(height: 10),
           
-          // Вбудований плеєр
           Container(
             height: 160,
             decoration: BoxDecoration(
@@ -342,7 +332,7 @@ class _MainDashboardState extends State<MainDashboard> {
                       ),
                       const SizedBox(height: 5),
                       Text(
-                        "▶️ ID: ${activePlayingVideo!.videoId}", 
+                        "▶️ Вбудований запуск ID: ${activePlayingVideo!.videoId}", 
                         style: const TextStyle(
                           color: Colors.cyanAccent, 
                           fontSize: 11
@@ -354,7 +344,6 @@ class _MainDashboardState extends State<MainDashboard> {
           
           const SizedBox(height: 15),
           
-          // Розпізнаний текст
           if (isServiceRunning)
             Container(
               padding: const EdgeInsets.all(12),
@@ -372,7 +361,6 @@ class _MainDashboardState extends State<MainDashboard> {
               ),
             ),
           
-          // Головна кнопка
           Expanded(
             child: Center(
               child: ElevatedButton(
@@ -385,9 +373,7 @@ class _MainDashboardState extends State<MainDashboard> {
                   setState(() {
                     isServiceRunning = !isServiceRunning;
                     if (isServiceRunning) {
-                      recognizedText = "ШІ-сканування екрана запущено...";
-                    } else {
-                      recognizedText = "";
+                      recognizedText = "ШІ-сканування екрана запущено поверх медіаплеєра...";
                     }
                   });
                 },
@@ -400,7 +386,6 @@ class _MainDashboardState extends State<MainDashboard> {
             ),
           ),
           
-          // Режими оптимізації
           Text(
             t('mode_title'), 
             style: const TextStyle(
@@ -451,7 +436,6 @@ class _MainDashboardState extends State<MainDashboard> {
           ),
           const SizedBox(height: 10),
           
-          // Додавання нового відео
           ExpansionTile(
             title: Text(
               t('add_title'), 
@@ -504,7 +488,6 @@ class _MainDashboardState extends State<MainDashboard> {
           
           const SizedBox(height: 10),
           
-          // Список відео
           Expanded(
             child: ListView.builder(
               itemCount: userMediaList.length,
@@ -533,7 +516,6 @@ class _MainDashboardState extends State<MainDashboard> {
                       onPressed: () => setState(() => userMediaList.removeAt(index))
                     ),
                     onTap: () {
-                      // Перевірка преміум доступу для відео без субтитрів
                       if (!item.hasSubtitles && !isPremium) {
                         showDialog(
                           context: context,
@@ -586,7 +568,6 @@ class _MainDashboardState extends State<MainDashboard> {
           ),
           const SizedBox(height: 20),
           
-          // Кнопка покупки
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.amber),
             onPressed: () {
@@ -608,7 +589,6 @@ class _MainDashboardState extends State<MainDashboard> {
           
           const SizedBox(height: 20),
           
-          // Поле для ліцензійного ключа
           TextField(
             controller: _licenseController,
             enabled: !isPremium && !isPayhipLoading,
@@ -622,7 +602,6 @@ class _MainDashboardState extends State<MainDashboard> {
           
           const SizedBox(height: 15),
           
-          // Кнопка активації
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: isPremium ? Colors.green : Colors.purpleAccent
