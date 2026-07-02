@@ -1,11 +1,11 @@
-name: Build LingoStream Web
+name: Build LingoStream
 on:
   push:
     branches:
       - main
 
 jobs:
-  build:
+  build_apk:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
@@ -23,14 +23,14 @@ jobs:
           flutter-version: '3.22.0'
           channel: 'stable'
 
-      - name: Clean and Build Web App
-        run: |
-          flutter clean
-          flutter pub get
-          flutter build web --release
+      - name: Get Flutter Dependencies
+        run: flutter pub get
 
-      - name: Upload Web Application
+      - name: Build APK
+        run: flutter build apk --release
+
+      - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: LingoStream-Web-Site
-          path: build/web/
+          name: LingoStream-APK
+          path: build/app/outputs/flutter-apk/app-release.apk
