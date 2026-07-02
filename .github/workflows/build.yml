@@ -2,7 +2,7 @@ name: Build Android APK
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
@@ -10,16 +10,297 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: Setup Flutter
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.16.0'
+          flutter-version: '3.22.0'
           channel: 'stable'
+
+      - name: Recreate Android project
+        run: |
+          rm -rf android
+          cp pubspec.yaml pubspec.yaml.bak
+          flutter create . --platforms=android --project-name=lingostream
+          mv pubspec.yaml.bak pubspec.yaml
+
+      - name: Fix minSdkVersion and Kotlin
+        run: |
+          sed -i 's/minSdkVersion .*/minSdkVersion 23/g' android/app/build.gradle
+          sed -i 's/ext.kotlin_version = .*/ext.kotlin_version = "1.9.24"/g' android/build.gradle || true
+
+      - name: Write AndroidManifest
+        run: |
+          cat > android/app/src/main/AndroidManifest.xml << 'EOF'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+              package="com.example.lingostream">
+              <uses-permission android:name="android.permission.INTERNET" />
+              <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+              <application
+                  android:label="LingoStream AI"
+                  android:name="${applicationName}"
+                  android:icon="@mipmap/ic_launcher">
+                  <meta-data
+                      android:name="com.google.android.gms.ads.APPLICATION_ID"
+                      android:value="ca-app-pub-3940256099942544~3347511713"/>
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true"
+                      android:launchMode="singleTop"
+                      android:theme="@style/LaunchTheme"
+                      android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+                      android:hardwareAccelerated="true"
+                      android:windowSoftInputMode="adjustResize">
+                      <meta-data
+                          android:name="io.flutter.embedding.android.NormalTheme"
+                          android:resource="@style/NormalTheme"/>
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN"/>
+                          <category android:name="android.intent.category.LAUNCHER"/>
+                      </intent-filter>
+                  </activity>
+                  <service
+                      android:name=".ScreenCaptureService"
+                      android:foregroundServiceType="mediaProjection"
+                      android:exported="false" />
+                  <meta-data
+                      android:name="flutterEmbedding"
+                      android:value="2"/>
+              </application>
+          </manifest>
+          EOF
+
+      - name: Write MainActivity.kt
+        run: |
+          mkdir -p android/app/src/main/kotlin/com/example/lingostream
+          cat > android/app/src/main/kotlin/com/example/lingostream/MainActivity.kt << 'EOF'
+          package com.example.lingostream
+          import android.app.Activity
+          import android.content.Context
+          import android.content.Intent
+          import android.media.projection.MediaProjectionManager
+          import android.net.Uri
+          import android.os.Build
+          import android.provider.Settings
+          import io.flutter.embedding.android.FlutterActivity
+          import io.flutter.embedding.engine.FlutterEngine
+          import io.flutter.plugin.common.MethodChannel
+          class MainActivity : FlutterActivity() {
+              private val CHANNEL = "com.example.lingostream/capture"
+              private val REQUEST_MEDIA_PROJECTION = 1001
+              private lateinit var channel: MethodChannel
+              private var pendingResult: MethodChannel.Result? = null
+              override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+                  super.configureFlutterEngine(flutterEngine)
+                  channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
+                  channel.setMethodCallHandler { call, result ->
+                      when (call.method) {
+                          "startCapture" -> { pendingResult = result; startCapture() }
+                          "stopCapture" -> {
+                              startService(Intent(this, ScreenCaptureService::class.java).apply { action = "STOP" })
+                              result.success(null)
+                          }
+                          "hasOverlayPermission" -> result.success(Settings.canDrawOverlays(this))
+                          "requestOverlayPermission" -> {
+                              startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+                              result.success(null)
+                          }
+                          else -> result.notImplemented()
+                      }
+                  }
+              }
+              private fun startCapture() {
+                  if (!Settings.canDrawOverlays(this)) {
+                      pendingResult?.error("NO_OVERLAY", "Потрібен дозвіл поверх екрана", null)
+                      pendingResult = null
+                      return
+                  }
+                  val mgr = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+                  startActivityForResult(mgr.createScreenCaptureIntent(), REQUEST_MEDIA_PROJECTION)
+              }
+              override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+                  super.onActivityResult(requestCode, resultCode, data)
+                  if (requestCode == REQUEST_MEDIA_PROJECTION) {
+                      if (resultCode == Activity.RESULT_OK && data != null) {
+                          val intent = Intent(this, ScreenCaptureService::class.java).apply {
+                              action = "START"; putExtra("resultCode", resultCode); putExtra("data", data)
+                          }
+                          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent)
+                          else startService(intent)
+                          pendingResult?.success(true)
+                      } else { pendingResult?.success(false) }
+                      pendingResult = null
+                  }
+              }
+          }
+          EOF
+
+      - name: Write ScreenCaptureService.kt
+        run: |
+          cat > android/app/src/main/kotlin/com/example/lingostream/ScreenCaptureService.kt << 'EOF'
+          package com.example.lingostream
+          import android.app.*
+          import android.content.Context
+          import android.content.Intent
+          import android.graphics.Bitmap
+          import android.graphics.PixelFormat
+          import android.hardware.display.DisplayManager
+          import android.hardware.display.VirtualDisplay
+          import android.media.ImageReader
+          import android.media.projection.MediaProjection
+          import android.media.projection.MediaProjectionManager
+          import android.os.*
+          import android.util.DisplayMetrics
+          import android.view.Gravity
+          import android.view.WindowManager
+          import android.widget.TextView
+          import androidx.core.app.NotificationCompat
+          import com.google.mlkit.vision.common.InputImage
+          import com.google.mlkit.vision.text.TextRecognition
+          import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+          import java.net.HttpURLConnection
+          import java.net.URL
+          import java.net.URLEncoder
+          import org.json.JSONObject
+          class ScreenCaptureService : Service() {
+              private var mediaProjection: MediaProjection? = null
+              private var virtualDisplay: VirtualDisplay? = null
+              private var imageReader: ImageReader? = null
+              private var overlayView: TextView? = null
+              private val mainHandler = Handler(Looper.getMainLooper())
+              private val bgThread = HandlerThread("LingoBG").also { it.start() }
+              private val bgHandler = Handler(bgThread.looper)
+              private var isRunning = false
+              private var lastText = ""
+              private val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+              private val captureRunnable = object : Runnable {
+                  override fun run() { if (isRunning) { doCapture(); bgHandler.postDelayed(this, 3000) } }
+              }
+              override fun onCreate() {
+                  super.onCreate()
+                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                      val ch = NotificationChannel("LingoStream", "LingoStream", NotificationManager.IMPORTANCE_LOW)
+                      getSystemService(NotificationManager::class.java)?.createNotificationChannel(ch)
+                  }
+              }
+              override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+                  when (intent?.action) {
+                      "START" -> {
+                          startForeground(1, buildNotification())
+                          val resultCode = intent.getIntExtra("resultCode", -1)
+                          val data: Intent? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
+                              intent.getParcelableExtra("data", Intent::class.java)
+                          else @Suppress("DEPRECATION") intent.getParcelableExtra("data")
+                          if (data != null) {
+                              val mgr = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+                              mediaProjection = mgr.getMediaProjection(resultCode, data)
+                              initCapture(); initOverlay(); isRunning = true
+                              bgHandler.postDelayed(captureRunnable, 1500)
+                          }
+                      }
+                      "STOP" -> { isRunning = false; cleanup(); stopForeground(STOP_FOREGROUND_REMOVE); stopSelf() }
+                  }
+                  return START_NOT_STICKY
+              }
+              private fun initCapture() {
+                  val wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+                  val metrics = DisplayMetrics()
+                  @Suppress("DEPRECATION") wm.defaultDisplay.getRealMetrics(metrics)
+                  imageReader = ImageReader.newInstance(metrics.widthPixels, metrics.heightPixels, PixelFormat.RGBA_8888, 2)
+                  virtualDisplay = mediaProjection?.createVirtualDisplay("LingoCapture",
+                      metrics.widthPixels, metrics.heightPixels, metrics.densityDpi,
+                      DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR, imageReader?.surface, null, null)
+              }
+              private fun initOverlay() {
+                  val wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+                  overlayView = TextView(this).apply {
+                      text = "🛸 Очікування субтитрів..."; textSize = 16f
+                      setTextColor(android.graphics.Color.WHITE)
+                      setBackgroundColor(android.graphics.Color.parseColor("#DD000000"))
+                      setPadding(24, 14, 24, 14)
+                  }
+                  val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                      WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                  else @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_PHONE
+                  val params = WindowManager.LayoutParams(WindowManager.LayoutParams.MATCH_PARENT,
+                      WindowManager.LayoutParams.WRAP_CONTENT, type,
+                      WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+                      PixelFormat.TRANSLUCENT).apply { gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL; y = 120 }
+                  mainHandler.post { wm.addView(overlayView, params) }
+              }
+              private fun doCapture() {
+                  val image = try { imageReader?.acquireLatestImage() } catch (e: Exception) { null } ?: return
+                  try {
+                      val plane = image.planes[0]
+                      val rowPadding = plane.rowStride - plane.pixelStride * image.width
+                      val full = Bitmap.createBitmap(image.width + rowPadding / plane.pixelStride, image.height, Bitmap.Config.ARGB_8888)
+                      full.copyPixelsFromBuffer(plane.buffer)
+                      val cropTop = (full.height * 0.55f).toInt()
+                      val cropH = (full.height * 0.38f).toInt()
+                      val cropped = Bitmap.createBitmap(full, 0, cropTop, full.width, cropH)
+                      full.recycle()
+                      recognizer.process(InputImage.fromBitmap(cropped, 0))
+                          .addOnSuccessListener { result ->
+                              val text = result.text.trim()
+                              if (text.isNotEmpty() && text != lastText && text.length > 3) {
+                                  lastText = text
+                                  bgHandler.post {
+                                      val translated = translate(text)
+                                      mainHandler.post { overlayView?.text = "🌐 $translated" }
+                                  }
+                              }
+                              cropped.recycle()
+                          }.addOnFailureListener { cropped.recycle() }
+                  } finally { image.close() }
+              }
+              private fun translate(text: String): String {
+                  return try {
+                      val encoded = URLEncoder.encode(text.take(400), "UTF-8")
+                      val url = URL("https://api.mymemory.translated.net/get?q=$encoded&langpair=en|uk")
+                      val conn = url.openConnection() as HttpURLConnection
+                      conn.connectTimeout = 5000; conn.readTimeout = 5000
+                      val resp = conn.inputStream.bufferedReader().readText()
+                      conn.disconnect()
+                      JSONObject(resp).getJSONObject("responseData").getString("translatedText")
+                  } catch (e: Exception) { text }
+              }
+              private fun cleanup() {
+                  bgHandler.removeCallbacks(captureRunnable)
+                  virtualDisplay?.release(); mediaProjection?.stop(); imageReader?.close(); recognizer.close()
+                  mainHandler.post { overlayView?.let { v ->
+                      try { (getSystemService(Context.WINDOW_SERVICE) as WindowManager).removeView(v) } catch (_: Exception) {}
+                  }}
+              }
+              private fun buildNotification(): Notification {
+                  val stopIntent = PendingIntent.getService(this, 0,
+                      Intent(this, ScreenCaptureService::class.java).apply { action = "STOP" },
+                      PendingIntent.FLAG_IMMUTABLE)
+                  return NotificationCompat.Builder(this, "LingoStream")
+                      .setContentTitle("🛸 LingoStream AI").setContentText("Переклад субтитрів активний")
+                      .setSmallIcon(android.R.drawable.ic_dialog_info)
+                      .addAction(android.R.drawable.ic_delete, "Зупинити", stopIntent)
+                      .setOngoing(true).build()
+              }
+              override fun onBind(intent: Intent?) = null
+              override fun onDestroy() { isRunning = false; cleanup(); bgThread.quitSafely(); super.onDestroy() }
+          }
+          EOF
 
       - name: Install dependencies
         run: flutter pub get
+
+      - name: Generate launcher icons
+        run: dart run flutter_launcher_icons
 
       - name: Build APK
         run: flutter build apk --release
@@ -29,3 +310,4 @@ jobs:
         with:
           name: LingoStream-APK
           path: build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 7
