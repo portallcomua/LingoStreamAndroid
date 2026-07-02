@@ -7,8 +7,13 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'media_service.dart';
+import 'services/update_service.dart';
 
-void main() => runApp(const LingoStreamApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await UpdateService.init();
+  runApp(const LingoStreamApp());
+}
 
 class LingoStreamApp extends StatelessWidget {
   const LingoStreamApp({super.key});
@@ -44,17 +49,23 @@ class MainDashboard extends StatefulWidget {
 }
 
 class _MainDashboardState extends State<MainDashboard> {
-  // Platform Channel для зв'язку з Kotlin
+  // Platform Channel for Kotlin communication
   static const _platform = MethodChannel('com.example.lingostream/capture');
-
+  
   int _currentTab = 0;
   late String currentLanguage;
   bool isServiceRunning = false;
   String selectedMode = 'movie';
+  String targetTranslateLang = 'uk';
+  String sourceTranslateLang = 'en';
+  
   final TextEditingController _customUrlController = TextEditingController();
   List<MediaItem> userMediaList = [];
   List<MediaItem> predefinedMedia = [];
   bool _isLoading = true;
+  String _currentVersion = '';
+  String _currentBuildNumber = '';
+  PackageInfo? _packageInfo;
 
   final Map<String, Map<String, String>> localizedData = {
     'UK': {
@@ -78,7 +89,8 @@ class _MainDashboardState extends State<MainDashboard> {
       'update_btn': 'ОНОВИТИ',
       'check_update': 'Перевірити оновлення',
       'settings': '⚙️ Налаштування',
-      'language': 'Мова',
+      'language': 'Мова інтерфейсу',
+      'translation_direction': 'Напрямок перекладу',
       'version': 'Версія',
       'privacy_policy': 'Політика конфіденційності',
       'delete': 'Видалити',
@@ -88,6 +100,7 @@ class _MainDashboardState extends State<MainDashboard> {
       'overlay_desc': 'Для показу перекладу поверх відео потрібен дозвіл "Відображення поверх інших додатків". Надайте його в налаштуваннях.',
       'overlay_btn': 'Відкрити налаштування',
       'hint_active': '💡 Переклад відображається поверх екрана.\nВідкрийте будь-яке відео з субтитрами.',
+      'uptodate': '✅ Версія актуальна',
     },
     'EN': {
       'app_title': '🛸 LingoStream AI',
@@ -110,7 +123,8 @@ class _MainDashboardState extends State<MainDashboard> {
       'update_btn': 'UPDATE',
       'check_update': 'Check for Updates',
       'settings': '⚙️ Settings',
-      'language': 'Language',
+      'language': 'Interface Language',
+      'translation_direction': 'Translation Direction',
       'version': 'Version',
       'privacy_policy': 'Privacy Policy',
       'delete': 'Delete',
@@ -120,6 +134,7 @@ class _MainDashboardState extends State<MainDashboard> {
       'overlay_desc': 'To show translation over video, grant "Display over other apps" permission in settings.',
       'overlay_btn': 'Open Settings',
       'hint_active': '💡 Translation is shown over the screen.\nOpen any video with subtitles.',
+      'uptodate': '✅ Version is up to date',
     }
   };
 
@@ -138,11 +153,18 @@ class _MainDashboardState extends State<MainDashboard> {
       predefinedMedia = MediaService.getPredefinedMedia();
       await _loadCustomVideos();
       await _loadLanguage();
+      await _loadTranslationSettings();
+      
+      // Get package info
+      _packageInfo = await PackageInfo.fromPlatform();
+      _currentVersion = _packageInfo!.version;
+      _currentBuildNumber = _packageInfo!.buildNumber;
     } catch (e) {
       debugPrint('Load error: $e');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+    
     WidgetsBinding.instance.addPostFrameCallback((_) => checkForGitHubUpdates());
   }
 
@@ -159,6 +181,20 @@ class _MainDashboardState extends State<MainDashboard> {
     await prefs.setString('language', lang);
   }
 
+  Future<void> _loadTranslationSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      targetTranslateLang = prefs.getString('target_lang') ?? 'uk';
+      sourceTranslateLang = prefs.getString('source_lang') ?? 'en';
+    });
+  }
+
+  Future<void> _saveTranslationSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('target_lang', targetTranslateLang);
+    await prefs.setString('source_lang', sourceTranslateLang);
+  }
+
   Future<void> _loadCustomVideos() async {
     final prefs = await SharedPreferences.getInstance();
     final List<String>? urls = prefs.getStringList('custom_videos');
@@ -168,7 +204,7 @@ class _MainDashboardState extends State<MainDashboard> {
         urls.length,
         (i) => MediaItem(
           title: titles[i],
-          category: '🔗 Мої відео',
+          category: currentLanguage == 'UK' ? '🔗 Мої відео' : '🔗 My Videos',
           url: urls[i],
           hasSubtitles: true,
           isCustom: true,
@@ -185,8 +221,7 @@ class _MainDashboardState extends State<MainDashboard> {
     await prefs.setStringList('custom_titles', userMediaList.map((e) => e.title).toList());
   }
 
-  // ===== PLATFORM CHANNEL: запуск/зупинка перекладача =====
-
+  // ===== PLATFORM CHANNEL: Start/Stop Translator =====
   Future<void> _toggleService() async {
     if (isServiceRunning) {
       await _stopService();
@@ -197,17 +232,24 @@ class _MainDashboardState extends State<MainDashboard> {
 
   Future<void> _startService() async {
     try {
-      final hasOverlay = await _platform.invokeMethod<bool>('hasOverlayPermission') ?? false;
+      final hasOverlay = await _platform.invokeMethod('hasOverlayPermission') ?? false;
       if (!hasOverlay) {
         _showOverlayPermissionDialog();
         return;
       }
-      final result = await _platform.invokeMethod<bool>('startCapture') ?? false;
+      
+      // Send settings to native service
+      final result = await _platform.invokeMethod('startCapture', {
+        'mode': selectedMode,
+        'targetLang': targetTranslateLang,
+        'sourceLang': sourceTranslateLang,
+      }) ?? false;
+      
       if (result && mounted) {
         setState(() => isServiceRunning = true);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('🛸 Переклад запущено! Відкрийте відео.'),
+          SnackBar(
+            content: Text('🛸 ${currentLanguage == 'UK' ? 'Переклад запущено! Відкрийте відео.' : 'Translation started! Open a video.'}'),
             backgroundColor: Colors.teal,
           ),
         );
@@ -215,7 +257,7 @@ class _MainDashboardState extends State<MainDashboard> {
     } on PlatformException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Помилка: ${e.message}'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Error: ${e.message}'), backgroundColor: Colors.red),
         );
       }
     }
@@ -240,13 +282,13 @@ class _MainDashboardState extends State<MainDashboard> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Скасувати'),
+            child: const Text('Cancel'),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.cyanAccent),
             onPressed: () async {
               Navigator.pop(context);
-              await _platform.invokeMethod('requestOverlayPermission');
+              await _platform.invokeMethod('request_overlay_permission');
             },
             child: Text(t('overlay_btn'), style: const TextStyle(color: Colors.black)),
           ),
@@ -256,44 +298,46 @@ class _MainDashboardState extends State<MainDashboard> {
   }
 
   // ===== GitHub Auto-Update =====
-
   Future<void> checkForGitHubUpdates() async {
     try {
-      final packageInfo = await PackageInfo.fromPlatform();
-      final response = await http.get(
-        Uri.parse('https://api.github.com/repos/portallcomua/LingoStreamAndroid/releases/latest'),
-      );
-      if (response.statusCode == 200) {
-        final Map<String, dynamic> json = jsonDecode(response.body);
-        final latestVersion = json['tag_name'].toString().replaceAll('v', '');
-        if (latestVersion != packageInfo.version) {
-          _showUpdateDialog(json['html_url'] ?? '');
-        }
+      final result = await UpdateService.check();
+      if (result.hasUpdate && mounted) {
+        _showUpdateDialog(result);
       }
     } catch (e) {
       debugPrint('Update check error: $e');
     }
   }
 
-  void _showUpdateDialog(String url) {
+  void _showUpdateDialog(UpdateCheckResult result) {
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xff1a1a1a),
         title: Text(t('update_title')),
-        content: Text(t('update_desc')),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(t('update_desc')),
+            const SizedBox(height: 12),
+            Text(
+              '${t('version')}: ${result.fullCurrentVersion} → ${result.fullLatestVersion}',
+              style: const TextStyle(color: Colors.cyanAccent),
+            ),
+          ],
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Пізніше'),
+            child: const Text('Later'),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.cyanAccent),
             onPressed: () async {
               Navigator.pop(context);
-              if (await canLaunchUrl(Uri.parse(url))) {
-                await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-              }
+              await UpdateService.openReleaseUrl(result.releaseUrl);
             },
             child: Text(t('update_btn'), style: const TextStyle(color: Colors.black)),
           ),
@@ -304,27 +348,20 @@ class _MainDashboardState extends State<MainDashboard> {
 
   Future<void> _checkForUpdatesManually() async {
     try {
-      final packageInfo = await PackageInfo.fromPlatform();
-      final response = await http.get(
-        Uri.parse('https://api.github.com/repos/portallcomua/LingoStreamAndroid/releases/latest'),
-      );
-      if (response.statusCode == 200) {
-        final Map<String, dynamic> json = jsonDecode(response.body);
-        final latestVersion = json['tag_name'].toString().replaceAll('v', '');
-        if (latestVersion != packageInfo.version) {
-          _showUpdateDialog(json['html_url'] ?? '');
-        } else {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('✅ Версія ${packageInfo.version} актуальна')),
-            );
-          }
+      final result = await UpdateService.check();
+      if (result.hasUpdate) {
+        _showUpdateDialog(result);
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('${t('uptodate')} (${result.fullCurrentVersion})')),
+          );
         }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('❌ Помилка перевірки: $e')),
+          SnackBar(content: Text('❌ Error: $e')),
         );
       }
     }
@@ -339,7 +376,7 @@ class _MainDashboardState extends State<MainDashboard> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Помилка: $e')),
+          SnackBar(content: Text('Error: $e')),
         );
       }
     }
@@ -350,14 +387,16 @@ class _MainDashboardState extends State<MainDashboard> {
     if (url.isEmpty) return;
     if (!url.startsWith('http://') && !url.startsWith('https://')) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Введіть коректний URL (http:// або https://)')),
+        SnackBar(content: Text(currentLanguage == 'UK' 
+            ? 'Введіть коректний URL (http:// або https://)' 
+            : 'Enter a valid URL (http:// or https://)')),
       );
       return;
     }
     setState(() {
       userMediaList.add(MediaItem(
-        title: 'Відео ${userMediaList.length + 1}',
-        category: '🔗 Мої відео',
+        title: '${currentLanguage == 'UK' ? 'Відео' : 'Video'} ${userMediaList.length + 1}',
+        category: currentLanguage == 'UK' ? '🔗 Мої відео' : '🔗 My Videos',
         url: url,
         hasSubtitles: true,
         isCustom: true,
@@ -371,12 +410,13 @@ class _MainDashboardState extends State<MainDashboard> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xff1a1a1a),
         title: Text(t('delete')),
-        content: const Text('Ви впевнені?'),
+        content: Text(currentLanguage == 'UK' ? 'Ви впевнені?' : 'Are you sure?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Скасувати'),
+            child: const Text('Cancel'),
           ),
           TextButton(
             onPressed: () {
@@ -387,7 +427,7 @@ class _MainDashboardState extends State<MainDashboard> {
                 SnackBar(content: Text(t('deleted'))),
               );
             },
-            child: const Text('Видалити', style: TextStyle(color: Colors.red)),
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -398,6 +438,7 @@ class _MainDashboardState extends State<MainDashboard> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xff1a1a1a),
         title: Text(t('no_cc_title'), style: const TextStyle(color: Colors.redAccent)),
         content: Text(t('no_cc_desc')),
         actions: [
@@ -418,65 +459,135 @@ class _MainDashboardState extends State<MainDashboard> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) => Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              t('settings'),
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.cyanAccent),
-            ),
-            const Divider(color: Colors.grey),
-            ListTile(
-              leading: const Icon(Icons.language, color: Colors.cyanAccent),
-              title: Text(t('language')),
-              trailing: DropdownButton<String>(
-                value: currentLanguage,
-                items: const [
-                  DropdownMenuItem(value: 'UK', child: Text('🇺🇦 Українська')),
-                  DropdownMenuItem(value: 'EN', child: Text('🇬🇧 English')),
-                ],
-                onChanged: (value) {
-                  if (value != null) {
-                    setState(() => currentLanguage = value);
-                    _saveLanguage(value);
-                    Navigator.pop(context);
-                  }
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) => Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                t('settings'),
+                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.cyanAccent),
+              ),
+              const Divider(color: Colors.grey),
+              
+              // Interface Language
+              ListTile(
+                leading: const Icon(Icons.language, color: Colors.cyanAccent),
+                title: Text(t('language')),
+                trailing: DropdownButton<String>(
+                  value: currentLanguage,
+                  items: const [
+                    DropdownMenuItem(value: 'UK', child: Text('🇺🇦 Українська')),
+                    DropdownMenuItem(value: 'EN', child: Text('🇬🇧 English')),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() => currentLanguage = value);
+                      _saveLanguage(value);
+                      setModalState(() {});
+                    }
+                  },
+                ),
+              ),
+              
+              // Translation Source Language
+              ListTile(
+                leading: const Icon(Icons.translate, color: Colors.purpleAccent),
+                title: Text(t('translation_direction')),
+                subtitle: Text('$sourceTranslateLang → $targetTranslateLang'),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    DropdownButton<String>(
+                      value: sourceTranslateLang,
+                      items: const [
+                        DropdownMenuItem(value: 'en', child: Text('EN')),
+                        DropdownMenuItem(value: 'uk', child: Text('UK')),
+                        DropdownMenuItem(value: 'pl', child: Text('PL')),
+                        DropdownMenuItem(value: 'de', child: Text('DE')),
+                        DropdownMenuItem(value: 'es', child: Text('ES')),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) {
+                          sourceTranslateLang = value;
+                          _saveTranslationSettings();
+                          setModalState(() {});
+                          _updateServiceSettings();
+                        }
+                      },
+                    ),
+                    const Text(' → '),
+                    DropdownButton<String>(
+                      value: targetTranslateLang,
+                      items: const [
+                        DropdownMenuItem(value: 'uk', child: Text('UK')),
+                        DropdownMenuItem(value: 'en', child: Text('EN')),
+                        DropdownMenuItem(value: 'pl', child: Text('PL')),
+                        DropdownMenuItem(value: 'de', child: Text('DE')),
+                        DropdownMenuItem(value: 'es', child: Text('ES')),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) {
+                          targetTranslateLang = value;
+                          _saveTranslationSettings();
+                          setModalState(() {});
+                          _updateServiceSettings();
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              
+              // Check Updates
+              ListTile(
+                leading: const Icon(Icons.update, color: Colors.cyanAccent),
+                title: Text(t('check_update')),
+                onTap: () {
+                  Navigator.pop(context);
+                  _checkForUpdatesManually();
                 },
               ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.update, color: Colors.cyanAccent),
-              title: Text(t('check_update')),
-              onTap: () {
-                Navigator.pop(context);
-                _checkForUpdatesManually();
-              },
-            ),
-            FutureBuilder<PackageInfo>(
-              future: PackageInfo.fromPlatform(),
-              builder: (context, snapshot) => ListTile(
+              
+              // Version
+              ListTile(
                 leading: const Icon(Icons.info, color: Colors.grey),
-                title: Text('${t('version')}: ${snapshot.data?.version ?? '...'}'),
+                title: Text('${t('version')}: $_currentVersion ($_currentBuildNumber)'),
               ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.privacy_tip, color: Colors.grey),
-              title: Text(t('privacy_policy')),
-              onTap: () {
-                Navigator.pop(context);
-                _launchUrl(
-                  'https://raw.githubusercontent.com/portallcomua/LingoStreamAndroid/main/PRIVACY_POLICY.md',
-                );
-              },
-            ),
-            const SizedBox(height: 20),
-          ],
+              
+              // Privacy Policy
+              ListTile(
+                leading: const Icon(Icons.privacy_tip, color: Colors.grey),
+                title: Text(t('privacy_policy')),
+                onTap: () {
+                  Navigator.pop(context);
+                  _launchUrl(
+                    'https://raw.githubusercontent.com/portallcomua/LingoStreamAndroid/main/PRIVACY_POLICY.md',
+                  );
+                },
+              ),
+              
+              const SizedBox(height: 20),
+            ],
+          ),
         ),
       ),
     );
+  }
+
+  Future<void> _updateServiceSettings() async {
+    if (!isServiceRunning) return;
+    try {
+      await _platform.invokeMethod('updateSettings', {
+        'mode': selectedMode,
+        'targetLang': targetTranslateLang,
+        'sourceLang': sourceTranslateLang,
+      });
+    } catch (e) {
+      debugPrint('Update settings error: $e');
+    }
   }
 
   @override
@@ -550,7 +661,7 @@ class _MainDashboardState extends State<MainDashboard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Статус
+          // Status
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
@@ -560,17 +671,29 @@ class _MainDashboardState extends State<MainDashboard> {
                 color: isServiceRunning ? Colors.tealAccent : Colors.grey.shade700,
               ),
             ),
-            child: Text(
-              isServiceRunning ? t('status_on') : t('status_off'),
-              style: TextStyle(
-                fontSize: 15,
-                color: isServiceRunning ? Colors.tealAccent : Colors.grey,
-                fontWeight: FontWeight.bold,
-              ),
-              textAlign: TextAlign.center,
+            child: Column(
+              children: [
+                Text(
+                  isServiceRunning ? t('status_on') : t('status_off'),
+                  style: TextStyle(
+                    fontSize: 15,
+                    color: isServiceRunning ? Colors.tealAccent : Colors.grey,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                if (isServiceRunning) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    '$sourceTranslateLang → $targetTranslateLang | $selectedMode',
+                    style: const TextStyle(color: Colors.purpleAccent, fontSize: 12),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ],
             ),
           ),
-
+          
           if (isServiceRunning) ...[
             const SizedBox(height: 10),
             Container(
@@ -586,8 +709,8 @@ class _MainDashboardState extends State<MainDashboard> {
               ),
             ),
           ],
-
-          // Кнопка СТАРТ/СТОП
+          
+          // START/STOP Button
           Expanded(
             child: Center(
               child: GestureDetector(
@@ -615,7 +738,7 @@ class _MainDashboardState extends State<MainDashboard> {
               ),
             ),
           ),
-
+          
           Text(
             t('mode_title'),
             style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold),
@@ -624,19 +747,28 @@ class _MainDashboardState extends State<MainDashboard> {
             title: Text(t('mode_movie')),
             value: 'movie',
             groupValue: selectedMode,
-            onChanged: (v) => setState(() => selectedMode = v!),
+            onChanged: (v) {
+              setState(() => selectedMode = v!);
+              _updateServiceSettings();
+            },
           ),
           RadioListTile<String>(
             title: Text(t('mode_pop')),
             value: 'pop',
             groupValue: selectedMode,
-            onChanged: (v) => setState(() => selectedMode = v!),
+            onChanged: (v) {
+              setState(() => selectedMode = v!);
+              _updateServiceSettings();
+            },
           ),
           RadioListTile<String>(
             title: Text(t('mode_rock')),
             value: 'rock',
             groupValue: selectedMode,
-            onChanged: (v) => setState(() => selectedMode = v!),
+            onChanged: (v) {
+              setState(() => selectedMode = v!);
+              _updateServiceSettings();
+            },
           ),
         ],
       ),
@@ -708,7 +840,7 @@ class _MainDashboardState extends State<MainDashboard> {
                                     ? Icons.record_voice_over
                                     : item.category.contains('BBC')
                                         ? Icons.newspaper
-                                        : item.category.contains('Мої')
+                                        : item.category.contains('Мої') || item.category.contains('My')
                                             ? Icons.person
                                             : Icons.movie,
                             color: Colors.purpleAccent,
