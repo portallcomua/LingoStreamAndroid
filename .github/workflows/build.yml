@@ -23,8 +23,16 @@ jobs:
           flutter-version: '3.22.0'
           channel: 'stable'
 
+      - name: Clean Flutter
+        run: flutter clean
+
       - name: Get Flutter Dependencies
         run: flutter pub get
+
+      - name: Regenerate Android Project
+        run: |
+          rm -rf android/
+          flutter create --platforms android .
 
       - name: Build APK
         run: flutter build apk --release
