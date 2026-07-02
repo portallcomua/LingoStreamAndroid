@@ -129,6 +129,7 @@ class _MainDashboardState extends State<MainDashboard> {
 
   String t(String key) => localizedData[currentLanguage]?[key] ?? key;
 
+  // ==================== АВТООНОВЛЕННЯ ====================
   Future<void> checkForGitHubUpdates() async {
     try {
       PackageInfo packageInfo = await PackageInfo.fromPlatform();
@@ -161,6 +162,7 @@ class _MainDashboardState extends State<MainDashboard> {
             style: ElevatedButton.styleFrom(backgroundColor: Colors.cyanAccent),
             onPressed: () {
               Navigator.pop(context);
+              _launchUrl("https://github.com/portallcomua/LingoStreamAndroid/releases/latest");
             },
             child: Text(t('update_btn'), style: const TextStyle(color: Colors.black)),
           ),
@@ -169,35 +171,77 @@ class _MainDashboardState extends State<MainDashboard> {
     );
   }
 
-  Future<void> _simulateTranslation() async {
-    if (!isServiceRunning) return;
+  void _launchUrl(String url) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Відкрийте: $url'),
+        backgroundColor: Colors.blue,
+      ),
+    );
+  }
+
+  // ==================== ПЕРЕКЛАД ====================
+  Future<void> _translateText(String text) async {
+    if (text.isEmpty) return;
 
     setState(() {
       isTranslating = true;
+      translatedText = "Перекладаю...";
+    });
+
+    try {
+      // ВИКОРИСТОВУЄМО БЕЗКОШТОВНИЙ API ПЕРЕКЛАДУ
+      final response = await http.post(
+        Uri.parse('https://api.mymemory.translated.net/get'),
+        body: {
+          'q': text,
+          'langpair': 'en|${currentLanguage == 'UK' ? 'uk' : 'en'}',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final translated = data['responseData']['translatedText'] ?? text;
+        setState(() {
+          translatedText = translated;
+          isTranslating = false;
+        });
+      } else {
+        setState(() {
+          translatedText = "Помилка перекладу";
+          isTranslating = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        translatedText = "Помилка: $e";
+        isTranslating = false;
+      });
+    }
+  }
+
+  Future<void> _simulateRecognition() async {
+    if (!isServiceRunning) return;
+
+    setState(() {
       recognizedText = "Розпізнавання тексту...";
-      translatedText = "Переклад...";
+      translatedText = "";
     });
 
     try {
       await Future.delayed(const Duration(seconds: 1));
+      
+      // ТЕСТОВИЙ ТЕКСТ ДЛЯ ПЕРЕКЛАДУ
       String mockText = "Hello, this is a test message from LingoStream AI!";
       
       setState(() {
         recognizedText = mockText;
       });
 
-      await Future.delayed(const Duration(seconds: 1));
-      String mockTranslation = currentLanguage == 'UK' 
-          ? "Привіт, це тестове повідомлення від LingoStream AI!"
-          : "Hello, this is a test message from LingoStream AI!";
-      
-      setState(() {
-        translatedText = mockTranslation;
-        isTranslating = false;
-      });
+      await _translateText(mockText);
     } catch (e) {
       setState(() {
-        recognizedText = "Помилка: $e";
+        recognizedText = "Помилка розпізнавання: $e";
         translatedText = "Помилка перекладу";
         isTranslating = false;
       });
@@ -401,8 +445,8 @@ class _MainDashboardState extends State<MainDashboard> {
                     isServiceRunning = !isServiceRunning;
                     if (isServiceRunning) {
                       recognizedText = "Розпізнавання запущено...";
-                      translatedText = "Очікуємо переклад...";
-                      _simulateTranslation();
+                      translatedText = "";
+                      _simulateRecognition();
                     } else {
                       recognizedText = "";
                       translatedText = "";
