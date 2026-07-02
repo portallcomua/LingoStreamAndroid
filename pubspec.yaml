@@ -1,5 +1,5 @@
 name: lingostream
-description: LingoStream AI - Smart Screen Translator
+description: LingoStream AI - Smart Screen Translator with ML Kit
 version: 1.0.0+1
 
 environment:
@@ -8,8 +8,21 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  
+  # HTTP запити
   http: ^1.1.0
+  
+  # Інформація про версію додатку
   package_info_plus: ^4.0.0
+  
+  # Google ML Kit для розпізнавання тексту
+  google_ml_kit: ^0.16.0
+  
+  # Для перекладу
+  google_ml_kit_translation: ^0.8.0
+  
+  # Для роботи з камерою/екраном
+  image_picker: ^1.0.0
 
 dev_dependencies:
   flutter_test:
