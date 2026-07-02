@@ -18,6 +18,14 @@ jobs:
         flutter-version: '3.16.0'
         channel: 'stable'
     
+    - name: Create new Flutter project
+      run: |
+        cd ..
+        flutter create --platforms=android --org com.lingostream temp_project
+        cp -r temp_project/android LingoStreamAndroid/
+        cp -r temp_project/ios LingoStreamAndroid/ 2>/dev/null || true
+        cd LingoStreamAndroid
+    
     - name: Install dependencies
       run: flutter pub get
     
