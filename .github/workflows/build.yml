@@ -23,12 +23,14 @@ jobs:
         flutter clean
         rm -rf android/.gradle
         rm -rf android/app/build
+        rm -rf build
     
     - name: Install dependencies
       run: flutter pub get
     
     - name: Generate launcher icons
       run: dart run flutter_launcher_icons
+      continue-on-error: true
     
     - name: Build APK
       run: flutter build apk --release
