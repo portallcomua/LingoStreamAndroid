@@ -1,36 +1,32 @@
-name: Build LingoStream
+name: Build LingoStream APK
 on:
   push:
     branches:
       - main
 
 jobs:
-  build_apk:
+  build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Set up Java 17
-        uses: actions/setup-java@v4
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
-          java-version: '17'
-
-      - name: Set up Flutter SDK
-        uses: subosito/flutter-action@v2
+          java-version: '11'
+      
+      - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.22.0'
-          channel: 'stable'
-
-      - name: Get Flutter Dependencies
-        run: flutter pub get
-
-      - name: Build APK
-        run: flutter build apk --release
-
-      - name: Upload APK Artifact
-        uses: actions/upload-artifact@v4
+          cache: true
+      
+      - run: flutter pub get
+      
+      - run: flutter pub global activate devicelab
+      
+      - run: flutter build apk --release -v
+      
+      - uses: actions/upload-artifact@v4
         with:
           name: LingoStream-APK
           path: build/app/outputs/flutter-apk/app-release.apk
