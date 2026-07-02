@@ -1,6 +1,7 @@
 name: lingostream
-description: LingoStream AI
-version: 1.0.0+1
+description: AI Live Screen Subtitle Translator
+publish_to: "none"
+version: 1.0.2+3
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -8,13 +9,23 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  http: ^1.1.0
-  package_info_plus: ^4.0.0
+  http: ^1.2.0
+  package_info_plus: ^8.0.0
+  shared_preferences: ^2.3.2
+  url_launcher: ^6.3.0
+  google_mobile_ads: ^5.1.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^3.0.0
+  flutter_launcher_icons: ^0.13.1
+
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "assets/logo.png"
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/logo.png
