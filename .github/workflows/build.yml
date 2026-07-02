@@ -18,19 +18,6 @@ jobs:
         flutter-version: '3.16.0'
         channel: 'stable'
     
-    - name: Create android folder
-      run: flutter create --platforms=android .
-    
-    - name: Create key.properties
-      run: |
-        echo "storePassword=${{ secrets.KEY_PASSWORD }}" > android/key.properties
-        echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> android/key.properties
-        echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> android/key.properties
-        echo "storeFile=../upload-keystore.jks" >> android/key.properties
-    
-    - name: Decode keystore
-      run: echo "${{ secrets.KEY_STORE }}" | base64 -d > upload-keystore.jks
-    
     - name: Install dependencies
       run: flutter pub get
     
