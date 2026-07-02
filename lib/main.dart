@@ -57,7 +57,7 @@ class _MainDashboardState extends State<MainDashboard> {
 
   final Map<String, Map<String, String>> localizedData = {
     'UK': {
-      'status_on': 'Перекладач: СКАНУВАННЯ ЕКРАНА (ШІ Google ML Kit)...',
+      'status_on': 'Перекладач: СКАНУВАННЯ ЕКРАНА...',
       'status_off': 'Перекладач: ВИМКНЕНО',
       'start': 'СТАРТ',
       'stop': 'СТОП',
@@ -70,25 +70,25 @@ class _MainDashboardState extends State<MainDashboard> {
       'hint_title': 'Назва фільму або пісні',
       'hint_id': 'YouTube Video ID (літери після =)',
       'btn_add': 'ДОДАТИ В КОЛЕКЦІЮ',
-      'ad_banner': '🤖 ТУТ БУДЕ БАНЕР GOOGLE ADMOB (BANNER_ID) 🤖',
+      'ad_banner': '🤖 ТУТ БУДЕ БАНЕР GOOGLE ADMOB 🤖',
       'no_cc_title': 'Потрібен Premium доступ! 💎',
-      'no_cc_desc': 'Це відео не має англійських субтитрів. Переклад чистого голосу (ШІ-аудіо Whisper) доступний лише у Premium підписці! Активуйте її у вкладці 💎.',
+      'no_cc_desc': 'Переклад чистого голосу доступний лише у Premium підписці!',
       'btn_close': 'ЗРОЗУМІЛО',
       'update_title': 'Доступне автооновлення! 🚀',
-      'update_desc': 'Знайдено нову версію LingoStream. Оновіть додаток в один клік без видалення програми.',
+      'update_desc': 'Знайдено нову версію LingoStream.',
       'update_btn': 'ОНОВИТИ ЗАРАЗ',
       'premium_title': 'Активація Premium',
-      'premium_desc': 'Введіть ліцензійний ключ для розблокування перекладу голосу (без субтитрів) та Особистого словника.',
+      'premium_desc': 'Введіть ліцензійний ключ для розблокування перекладу голосу.',
       'btn_activate': 'АКТИВУВАТИ ПРЕМІУМ',
       'btn_buy_payhip': '🛒 КУПИТИ PREMIUM КЛЮЧ',
       'success_msg': 'Premium успішно активовано! 🎸🛸',
-      'error_msg': 'Невірний або заблокований ключ!',
-      'player_title': '📺 Вбудований Медіаплеєр LingoStream',
+      'error_msg': 'Невірний ключ!',
+      'player_title': '📺 Вбудований Медіаплеєр',
       'translated_label': '📝 Переклад:',
       'recognized_label': '🔍 Розпізнано:',
     },
     'EN': {
-      'status_on': 'Translator: SCANNING SCREEN (Google ML Kit)...',
+      'status_on': 'Translator: SCANNING SCREEN...',
       'status_off': 'Translator: OFF',
       'start': 'START',
       'stop': 'STOP',
@@ -101,19 +101,19 @@ class _MainDashboardState extends State<MainDashboard> {
       'hint_title': 'Movie or Song Title',
       'hint_id': 'YouTube Video ID (letters after =)',
       'btn_add': 'ADD TO COLLECTION',
-      'ad_banner': '🤖 GOOGLE ADMOB ADS PLACEHOLDER (BANNER_ID) 🤖',
+      'ad_banner': '🤖 GOOGLE ADMOB ADS PLACEHOLDER 🤖',
       'no_cc_title': 'Premium Access Required! 💎',
-      'no_cc_desc': 'This video has no subtitles. Pure voice translation (Whisper AI) is a Premium feature! Please activate it in 💎 tab.',
+      'no_cc_desc': 'Pure voice translation is a Premium feature!',
       'btn_close': 'GOT IT',
       'update_title': 'Auto-Update Available! 🚀',
-      'update_desc': 'A new version of LingoStream found. Update instantly without deleting the app.',
+      'update_desc': 'A new version of LingoStream found.',
       'update_btn': 'UPDATE NOW',
       'premium_title': 'Activate Premium',
-      'premium_desc': 'Enter the license key to unlock voice translation and Personal Dictionary.',
+      'premium_desc': 'Enter the license key to unlock voice translation.',
       'btn_activate': 'ACTIVATE PREMIUM',
       'btn_buy_payhip': '🛒 BUY PREMIUM KEY',
       'success_msg': 'Premium activated successfully! 🎸🛸',
-      'error_msg': 'Invalid or blocked license key!',
+      'error_msg': 'Invalid key!',
       'player_title': '📺 LingoStream Internal Player',
       'translated_label': '📝 Translation:',
       'recognized_label': '🔍 Recognized:',
@@ -129,7 +129,6 @@ class _MainDashboardState extends State<MainDashboard> {
 
   String t(String key) => localizedData[currentLanguage]?[key] ?? key;
 
-  // ========== АВТООНОВЛЕННЯ ==========
   Future<void> checkForGitHubUpdates() async {
     try {
       PackageInfo packageInfo = await PackageInfo.fromPlatform();
@@ -162,7 +161,6 @@ class _MainDashboardState extends State<MainDashboard> {
             style: ElevatedButton.styleFrom(backgroundColor: Colors.cyanAccent),
             onPressed: () {
               Navigator.pop(context);
-              _launchUrl("https://github.com/portallcomua/LingoStreamAndroid/releases/latest");
             },
             child: Text(t('update_btn'), style: const TextStyle(color: Colors.black)),
           ),
@@ -171,16 +169,6 @@ class _MainDashboardState extends State<MainDashboard> {
     );
   }
 
-  void _launchUrl(String url) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Відкрийте: $url'),
-        backgroundColor: Colors.blue,
-      ),
-    );
-  }
-
-  // ========== СИМУЛЯЦІЯ ПЕРЕКЛАДУ ==========
   Future<void> _simulateTranslation() async {
     if (!isServiceRunning) return;
 
@@ -191,15 +179,13 @@ class _MainDashboardState extends State<MainDashboard> {
     });
 
     try {
-      // Симуляція розпізнавання
-      String mockText = "Hello, this is a test message from LingoStream AI!";
       await Future.delayed(const Duration(seconds: 1));
+      String mockText = "Hello, this is a test message from LingoStream AI!";
       
       setState(() {
         recognizedText = mockText;
       });
 
-      // Симуляція перекладу
       await Future.delayed(const Duration(seconds: 1));
       String mockTranslation = currentLanguage == 'UK' 
           ? "Привіт, це тестове повідомлення від LingoStream AI!"
@@ -211,7 +197,7 @@ class _MainDashboardState extends State<MainDashboard> {
       });
     } catch (e) {
       setState(() {
-        recognizedText = "Помилка розпізнавання: $e";
+        recognizedText = "Помилка: $e";
         translatedText = "Помилка перекладу";
         isTranslating = false;
       });
@@ -312,8 +298,6 @@ class _MainDashboardState extends State<MainDashboard> {
             style: const TextStyle(fontSize: 14),
           ),
           const SizedBox(height: 10),
-
-          // Вбудований плеєр
           Container(
             height: 160,
             decoration: BoxDecoration(
@@ -355,10 +339,7 @@ class _MainDashboardState extends State<MainDashboard> {
                     ],
                   ),
           ),
-
           const SizedBox(height: 15),
-
-          // Розпізнаний та перекладений текст
           if (isServiceRunning)
             Container(
               padding: const EdgeInsets.all(12),
@@ -405,8 +386,6 @@ class _MainDashboardState extends State<MainDashboard> {
                 ],
               ),
             ),
-
-          // Головна кнопка
           Expanded(
             child: Center(
               child: ElevatedButton(
@@ -438,7 +417,6 @@ class _MainDashboardState extends State<MainDashboard> {
               ),
             ),
           ),
-
           Text(
             t('mode_title'),
             style: const TextStyle(
