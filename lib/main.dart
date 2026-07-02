@@ -3,7 +3,6 @@ import 'dart:ui';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:google_ml_kit/google_ml_kit.dart';
 import 'media_service.dart';
 
 void main() => runApp(const LingoStreamApp());
@@ -53,10 +52,6 @@ class _MainDashboardState extends State<MainDashboard> {
   final TextEditingController _customIdController = TextEditingController();
   final TextEditingController _licenseController = TextEditingController();
   String selectedCategory = "🎬 Movies & Series";
-
-  // Для ML Kit
-  late TextRecognizer _textRecognizer;
-  late GoogleTranslator _translator;
 
   List<MediaItem> userMediaList = MediaService.getPredefinedMedia();
 
@@ -129,29 +124,12 @@ class _MainDashboardState extends State<MainDashboard> {
   void initState() {
     super.initState();
     currentLanguage = widget.initialLanguage;
-    _initMLKit();
     WidgetsBinding.instance.addPostFrameCallback((_) => checkForGitHubUpdates());
-  }
-
-  // ========== ІНІЦІАЛІЗАЦІЯ ML KIT ==========
-  void _initMLKit() {
-    _textRecognizer = GoogleMlKit.vision.textRecognizer();
-    _translator = GoogleTranslator(
-      sourceLanguage: 'en',
-      targetLanguage: currentLanguage == 'UK' ? 'uk' : 'en',
-    );
-  }
-
-  @override
-  void dispose() {
-    _textRecognizer.close();
-    _translator.close();
-    super.dispose();
   }
 
   String t(String key) => localizedData[currentLanguage]?[key] ?? key;
 
-  // ========== ПЕРЕВІРКА ОНОВЛЕНЬ (АВТООНОВЛЕННЯ) ==========
+  // ========== АВТООНОВЛЕННЯ ==========
   Future<void> checkForGitHubUpdates() async {
     try {
       PackageInfo packageInfo = await PackageInfo.fromPlatform();
@@ -179,21 +157,14 @@ class _MainDashboardState extends State<MainDashboard> {
         title: Text(t('update_title')),
         content: Text(t('update_desc')),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Later'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Later')),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.cyanAccent),
             onPressed: () {
               Navigator.pop(context);
-              // Відкриваємо GitHub Releases
               _launchUrl("https://github.com/portallcomua/LingoStreamAndroid/releases/latest");
             },
-            child: Text(
-              t('update_btn'),
-              style: const TextStyle(color: Colors.black),
-            ),
+            child: Text(t('update_btn'), style: const TextStyle(color: Colors.black)),
           ),
         ],
       ),
@@ -201,7 +172,6 @@ class _MainDashboardState extends State<MainDashboard> {
   }
 
   void _launchUrl(String url) {
-    // Тут можна додати url_launcher або просто показати повідомлення
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('Відкрийте: $url'),
@@ -210,8 +180,8 @@ class _MainDashboardState extends State<MainDashboard> {
     );
   }
 
-  // ========== ФУНКЦІЯ РОЗПІЗНАВАННЯ ТА ПЕРЕКЛАДУ ==========
-  Future<void> _recognizeAndTranslate() async {
+  // ========== СИМУЛЯЦІЯ ПЕРЕКЛАДУ ==========
+  Future<void> _simulateTranslation() async {
     if (!isServiceRunning) return;
 
     setState(() {
@@ -221,19 +191,22 @@ class _MainDashboardState extends State<MainDashboard> {
     });
 
     try {
-      // Тут має бути реальне розпізнавання з екрана
-      // Для демонстрації використовуємо тестовий текст
+      // Симуляція розпізнавання
       String mockText = "Hello, this is a test message from LingoStream AI!";
+      await Future.delayed(const Duration(seconds: 1));
       
       setState(() {
         recognizedText = mockText;
       });
 
-      // Переклад
-      final result = await _translator.translate(mockText);
+      // Симуляція перекладу
+      await Future.delayed(const Duration(seconds: 1));
+      String mockTranslation = currentLanguage == 'UK' 
+          ? "Привіт, це тестове повідомлення від LingoStream AI!"
+          : "Hello, this is a test message from LingoStream AI!";
       
       setState(() {
-        translatedText = result;
+        translatedText = mockTranslation;
         isTranslating = false;
       });
     } catch (e) {
@@ -272,11 +245,6 @@ class _MainDashboardState extends State<MainDashboard> {
           TextButton(
             onPressed: () => setState(() {
               currentLanguage = currentLanguage == 'UK' ? 'EN' : 'UK';
-              // Оновлюємо мову перекладу
-              _translator = GoogleTranslator(
-                sourceLanguage: 'en',
-                targetLanguage: currentLanguage == 'UK' ? 'uk' : 'en',
-              );
             }),
             child: Text(
               currentLanguage,
@@ -390,7 +358,7 @@ class _MainDashboardState extends State<MainDashboard> {
 
           const SizedBox(height: 15),
 
-          // Розпізнаний текст
+          // Розпізнаний та перекладений текст
           if (isServiceRunning)
             Container(
               padding: const EdgeInsets.all(12),
@@ -455,8 +423,7 @@ class _MainDashboardState extends State<MainDashboard> {
                     if (isServiceRunning) {
                       recognizedText = "Розпізнавання запущено...";
                       translatedText = "Очікуємо переклад...";
-                      // Запускаємо розпізнавання та переклад
-                      _recognizeAndTranslate();
+                      _simulateTranslation();
                     } else {
                       recognizedText = "";
                       translatedText = "";
