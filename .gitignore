@@ -1,0 +1,28 @@
+# Flutter
+.DS_Store
+.dart_tool/
+.packages/
+build/
+pubspec.lock
+
+# Android
+android/.gradle
+android/app/build
+android/local.properties
+*.iml
+
+# iOS
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/App.framework
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Key store
+key.properties
+*.jks
+upload-keystore.jks
