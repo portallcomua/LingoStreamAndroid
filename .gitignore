@@ -6,21 +6,13 @@ build/
 pubspec.lock
 
 # Android
-android/.gradle
-android/app/build
-android/local.properties
+android/
 *.iml
-
-# iOS
-ios/Pods/
-ios/.symlinks/
-ios/Flutter/App.framework
 
 # IDE
 .idea/
 .vscode/
 *.swp
-*.swo
 
 # Key store
 key.properties
