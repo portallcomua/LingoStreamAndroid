@@ -40,26 +40,12 @@ jobs:
           echo "keyAlias=upload" >> android/key.properties
           echo "storeFile=app/upload-keystore.jks" >> android/key.properties
           
-          # Автоматичне налаштування AdMob, minSdkVersion, signingConfigs та версії Kotlin після генерації папки android
+          # Автоматичне налаштування minSdkVersion, signingConfigs та версії Kotlin після генерації папки android
           python3 -c "
           import os
           import re
 
-          # 1. Додавання AdMob App ID в AndroidManifest.xml (безпечно перед </application>)
-          manifest_path = 'android/app/src/main/AndroidManifest.xml'
-          if os.path.exists(manifest_path):
-              with open(manifest_path, 'r', encoding='utf-8') as f:
-                  content = f.read()
-              
-              admob_tag = '\n        <meta-data\n            android:name=\"com.google.android.gms.ads.APPLICATION_ID\"\n            android:value=\"ca-app-pub-3940256099942544~3347511713\"/>'
-              
-              if 'com.google.android.gms.ads.APPLICATION_ID' not in content:
-                  content = content.replace('</application>', admob_tag + '\n    </application>')
-                  with open(manifest_path, 'w', encoding='utf-8') as f:
-                      f.write(content)
-                  print('✅ AndroidManifest.xml успішно оновлено тестовим AdMob App ID.')
-
-          # 2. Оновлення minSdkVersion до 21 для підтримки Google ML Kit та налаштування signingConfigs
+          # 1. Оновлення minSdkVersion до 21 для підтримки Google ML Kit та налаштування signingConfigs
           gradle_path = 'android/app/build.gradle'
           if os.path.exists(gradle_path):
               with open(gradle_path, 'r', encoding='utf-8') as f:
@@ -96,7 +82,7 @@ jobs:
                   f.write(content)
               print('✅ build.gradle успішно оновлено.')
 
-          # 3. Оновлення версії Kotlin Gradle Plugin до 1.9.24 у root-рівневих файлах
+          # 2. Оновлення версії Kotlin Gradle Plugin до 1.9.24 у root-рівневих файлах
           build_gradle_path = 'android/build.gradle'
           if os.path.exists(build_gradle_path):
               with open(build_gradle_path, 'r', encoding='utf-8') as f:
