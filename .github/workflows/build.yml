@@ -30,7 +30,8 @@ jobs:
         run: |
           flutter --version
           flutter pub get
-          flutter create --platforms=android .
+          # Додано параметр --project-name=lingostream для уникнення помилки назви папки LingoStreamAndroid
+          flutter create --project-name=lingostream --platforms=android .
           
           # Автоматичне налаштування AdMob та minSdkVersion після генерації папки android
           python3 -c "
