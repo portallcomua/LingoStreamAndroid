@@ -1,890 +1,258 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'dart:ui';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'media_service.dart';
-import 'services/update_service.dart';
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await UpdateService.init();
-  runApp(const LingoStreamApp());
-}
+void main() => runApp(const LingoStreamApp());
 
 class LingoStreamApp extends StatelessWidget {
   const LingoStreamApp({super.key});
-
   @override
-  Widget build(BuildContext context) {
-    final String systemLocale = PlatformDispatcher.instance.locale.languageCode;
-    return MaterialApp(
-      title: 'LingoStream AI',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData.dark().copyWith(
-        scaffoldBackgroundColor: const Color(0xff0d0d0d),
-        colorScheme: const ColorScheme.dark(
-          primary: Colors.cyanAccent,
-          secondary: Colors.purpleAccent,
-        ),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xff141414),
-          elevation: 0,
-        ),
-      ),
-      home: MainDashboard(initialLanguage: systemLocale == 'uk' ? 'UK' : 'EN'),
-    );
-  }
+  Widget build(BuildContext context) => MaterialApp(
+    title: 'LingoStream AI',
+    debugShowCheckedModeBanner: false,
+    theme: ThemeData.dark().copyWith(
+      scaffoldBackgroundColor: const Color(0xff0d0d0d),
+      colorScheme: const ColorScheme.dark(primary: Colors.cyanAccent, secondary: Colors.purpleAccent),
+      appBarTheme: const AppBarTheme(backgroundColor: Color(0xff141414), elevation: 0),
+    ),
+    home: const MainDashboard(),
+  );
 }
 
 class MainDashboard extends StatefulWidget {
-  final String initialLanguage;
-  const MainDashboard({super.key, required this.initialLanguage});
-
+  const MainDashboard({super.key});
   @override
   State<MainDashboard> createState() => _MainDashboardState();
 }
 
 class _MainDashboardState extends State<MainDashboard> {
-  // Platform Channel for Kotlin communication
   static const _platform = MethodChannel('com.example.lingostream/capture');
-  
-  int _currentTab = 0;
-  late String currentLanguage;
-  bool isServiceRunning = false;
-  String selectedMode = 'movie';
-  String targetTranslateLang = 'uk';
-  String sourceTranslateLang = 'en';
-  
-  final TextEditingController _customUrlController = TextEditingController();
-  List<MediaItem> userMediaList = [];
-  List<MediaItem> predefinedMedia = [];
-  bool _isLoading = true;
-  String _currentVersion = '';
-  String _currentBuildNumber = '';
-  PackageInfo? _packageInfo;
+  int _tab = 0;
+  String _lang = 'UK';
+  bool _running = false;
+  String _mode = 'movie';
+  final _urlCtrl = TextEditingController();
+  List<MediaItem> _custom = [];
+  List<MediaItem> _predefined = [];
+  bool _loading = true;
 
-  final Map<String, Map<String, String>> localizedData = {
+  final Map<String, Map<String, String>> _loc = {
     'UK': {
-      'app_title': '🛸 LingoStream AI',
-      'status_on': 'Перекладач: АКТИВНИЙ (OCR Екран)',
-      'status_off': 'Перекладач: ВИМКНЕНО',
-      'start': 'СТАРТ',
-      'stop': 'СТОП',
-      'mode_title': 'Режим перекладу субтитрів:',
-      'mode_movie': 'Кіно & Серіали',
-      'mode_pop': 'Поп-музика & Блоги',
-      'mode_rock': '🎸 Рок-музика (Швидкі субтитри)',
-      'media_title': '🎬 Колекції & Відео',
-      'add_custom': 'Додати своє відео (URL)',
-      'ad_banner': '📢 Місце для Google AdMob (BANNER_ID)',
-      'no_cc_title': '⚠️ Немає субтитрів!',
-      'no_cc_desc': 'Це відео не має субтитрів. Оберіть відео з позначкою "CC ✅".',
-      'btn_close': 'ЗРОЗУМІЛО',
-      'update_title': '🚀 Доступне оновлення!',
-      'update_desc': 'Знайдено нову версію LingoStream.',
-      'update_btn': 'ОНОВИТИ',
-      'check_update': 'Перевірити оновлення',
-      'settings': '⚙️ Налаштування',
-      'language': 'Мова інтерфейсу',
-      'translation_direction': 'Напрямок перекладу',
-      'version': 'Версія',
-      'privacy_policy': 'Політика конфіденційності',
-      'delete': 'Видалити',
-      'no_videos': 'Немає відео. Додайте своє!',
-      'deleted': 'Видалено!',
-      'overlay_title': 'Потрібен дозвіл',
-      'overlay_desc': 'Для показу перекладу поверх відео потрібен дозвіл "Відображення поверх інших додатків". Надайте його в налаштуваннях.',
-      'overlay_btn': 'Відкрити налаштування',
-      'hint_active': '💡 Переклад відображається поверх екрана.\nВідкрийте будь-яке відео з субтитрами.',
-      'uptodate': '✅ Версія актуальна',
+      'title': '🛸 LingoStream AI', 'on': 'Перекладач: АКТИВНИЙ', 'off': 'Перекладач: ВИМКНЕНО',
+      'hint': '💡 Відкрийте відео — переклад з\'явиться знизу екрана',
+      'mode': 'Режим перекладу:', 'm1': 'Кіно & Серіали', 'm2': 'Музика & Блоги', 'm3': '🎸 Рок (Швидкий)',
+      'media': '🎬 Відео & Колекції', 'add': 'Додати URL відео', 'ad': '📢 Google AdMob (BANNER_ID)',
+      'nocc': '⚠️ Немає субтитрів!', 'noccd': 'Відео без субтитрів. Оберіть з позначкою CC ✅',
+      'ok': 'ЗРОЗУМІЛО', 'upd': '🚀 Оновлення!', 'updd': 'Нова версія LingoStream доступна',
+      'updb': 'ОНОВИТИ', 'chk': 'Перевірити оновлення', 'sets': '⚙️ Налаштування',
+      'lang': 'Мова', 'ver': 'Версія', 'pp': 'Конфіденційність', 'del': 'Видалити',
+      'novid': 'Немає відео. Додайте своє!', 'deleted': 'Видалено!',
+      'ovt': 'Потрібен дозвіл', 'ovd': 'Надайте дозвіл "Поверх інших додатків" у налаштуваннях.',
+      'ovb': 'Відкрити налаштування', 'actual': 'актуальна',
     },
     'EN': {
-      'app_title': '🛸 LingoStream AI',
-      'status_on': 'Translator: ACTIVE (Screen OCR)',
-      'status_off': 'Translator: OFF',
-      'start': 'START',
-      'stop': 'STOP',
-      'mode_title': 'Subtitle Translation Mode:',
-      'mode_movie': 'Movies & Series',
-      'mode_pop': 'Pop Music & Vlogs',
-      'mode_rock': '🎸 Rock Music (Fast Subtitles)',
-      'media_title': '🎬 Collections & Video',
-      'add_custom': 'Add Custom Video (URL)',
-      'ad_banner': '📢 Google AdMob Placeholder (BANNER_ID)',
-      'no_cc_title': '⚠️ No Subtitles!',
-      'no_cc_desc': 'This video has no subtitles. Choose a video with "CC ✅" mark.',
-      'btn_close': 'GOT IT',
-      'update_title': '🚀 Update Available!',
-      'update_desc': 'New version of LingoStream found.',
-      'update_btn': 'UPDATE',
-      'check_update': 'Check for Updates',
-      'settings': '⚙️ Settings',
-      'language': 'Interface Language',
-      'translation_direction': 'Translation Direction',
-      'version': 'Version',
-      'privacy_policy': 'Privacy Policy',
-      'delete': 'Delete',
-      'no_videos': 'No videos. Add yours!',
-      'deleted': 'Deleted!',
-      'overlay_title': 'Permission Required',
-      'overlay_desc': 'To show translation over video, grant "Display over other apps" permission in settings.',
-      'overlay_btn': 'Open Settings',
-      'hint_active': '💡 Translation is shown over the screen.\nOpen any video with subtitles.',
-      'uptodate': '✅ Version is up to date',
-    }
+      'title': '🛸 LingoStream AI', 'on': 'Translator: ACTIVE', 'off': 'Translator: OFF',
+      'hint': '💡 Open any video — translation appears at the bottom',
+      'mode': 'Translation Mode:', 'm1': 'Movies & Series', 'm2': 'Music & Vlogs', 'm3': '🎸 Rock (Fast)',
+      'media': '🎬 Video & Collections', 'add': 'Add video URL', 'ad': '📢 Google AdMob (BANNER_ID)',
+      'nocc': '⚠️ No Subtitles!', 'noccd': 'No subtitles. Choose video with CC ✅',
+      'ok': 'GOT IT', 'upd': '🚀 Update!', 'updd': 'New LingoStream version available',
+      'updb': 'UPDATE', 'chk': 'Check for Updates', 'sets': '⚙️ Settings',
+      'lang': 'Language', 'ver': 'Version', 'pp': 'Privacy Policy', 'del': 'Delete',
+      'novid': 'No videos. Add yours!', 'deleted': 'Deleted!',
+      'ovt': 'Permission Required', 'ovd': 'Grant "Display over other apps" permission in settings.',
+      'ovb': 'Open Settings', 'actual': 'up to date',
+    },
   };
 
-  String t(String key) => localizedData[currentLanguage]?[key] ?? key;
+  String t(String k) => _loc[_lang]?[k] ?? k;
 
   @override
-  void initState() {
-    super.initState();
-    currentLanguage = widget.initialLanguage;
-    _loadData();
+  void initState() { super.initState(); _load(); }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    _predefined = MediaService.getPredefinedMedia();
+    final p = await SharedPreferences.getInstance();
+    _lang = p.getString('lang') ?? 'UK';
+    final urls = p.getStringList('cv') ?? [];
+    final titles = p.getStringList('ct') ?? [];
+    _custom = List.generate(urls.length, (i) => MediaItem(title: titles[i], category: '🔗 Мої відео', url: urls[i], isCustom: true));
+    if (mounted) setState(() => _loading = false);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkUpdate());
   }
 
-  Future<void> _loadData() async {
-    setState(() => _isLoading = true);
-    try {
-      predefinedMedia = MediaService.getPredefinedMedia();
-      await _loadCustomVideos();
-      await _loadLanguage();
-      await _loadTranslationSettings();
-      
-      // Get package info
-      _packageInfo = await PackageInfo.fromPlatform();
-      _currentVersion = _packageInfo!.version;
-      _currentBuildNumber = _packageInfo!.buildNumber;
-    } catch (e) {
-      debugPrint('Load error: $e');
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
-    
-    WidgetsBinding.instance.addPostFrameCallback((_) => checkForGitHubUpdates());
+  Future<void> _saveLang(String l) async { final p = await SharedPreferences.getInstance(); await p.setString('lang', l); }
+  Future<void> _saveCustom() async {
+    final p = await SharedPreferences.getInstance();
+    await p.setStringList('cv', _custom.map((e) => e.url).toList());
+    await p.setStringList('ct', _custom.map((e) => e.title).toList());
   }
 
-  Future<void> _loadLanguage() async {
-    final prefs = await SharedPreferences.getInstance();
-    final saved = prefs.getString('language');
-    if (saved != null && saved != currentLanguage) {
-      setState(() => currentLanguage = saved);
-    }
-  }
-
-  Future<void> _saveLanguage(String lang) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('language', lang);
-  }
-
-  Future<void> _loadTranslationSettings() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      targetTranslateLang = prefs.getString('target_lang') ?? 'uk';
-      sourceTranslateLang = prefs.getString('source_lang') ?? 'en';
-    });
-  }
-
-  Future<void> _saveTranslationSettings() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('target_lang', targetTranslateLang);
-    await prefs.setString('source_lang', sourceTranslateLang);
-  }
-
-  Future<void> _loadCustomVideos() async {
-    final prefs = await SharedPreferences.getInstance();
-    final List<String>? urls = prefs.getStringList('custom_videos');
-    final List<String>? titles = prefs.getStringList('custom_titles');
-    if (urls != null && titles != null) {
-      userMediaList = List.generate(
-        urls.length,
-        (i) => MediaItem(
-          title: titles[i],
-          category: currentLanguage == 'UK' ? '🔗 Мої відео' : '🔗 My Videos',
-          url: urls[i],
-          hasSubtitles: true,
-          isCustom: true,
-        ),
-      );
-    } else {
-      userMediaList = [];
-    }
-  }
-
-  Future<void> _saveCustomVideos() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList('custom_videos', userMediaList.map((e) => e.url).toList());
-    await prefs.setStringList('custom_titles', userMediaList.map((e) => e.title).toList());
-  }
-
-  // ===== PLATFORM CHANNEL: Start/Stop Translator =====
   Future<void> _toggleService() async {
-    if (isServiceRunning) {
-      await _stopService();
+    if (_running) {
+      try { await _platform.invokeMethod('stopCapture'); if (mounted) setState(() => _running = false); }
+      catch (e) { debugPrint('stop: $e'); }
     } else {
-      await _startService();
-    }
-  }
-
-  Future<void> _startService() async {
-    try {
-      final hasOverlay = await _platform.invokeMethod('hasOverlayPermission') ?? false;
-      if (!hasOverlay) {
-        _showOverlayPermissionDialog();
-        return;
-      }
-      
-      // Send settings to native service
-      final result = await _platform.invokeMethod('startCapture', {
-        'mode': selectedMode,
-        'targetLang': targetTranslateLang,
-        'sourceLang': sourceTranslateLang,
-      }) ?? false;
-      
-      if (result && mounted) {
-        setState(() => isServiceRunning = true);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('🛸 ${currentLanguage == 'UK' ? 'Переклад запущено! Відкрийте відео.' : 'Translation started! Open a video.'}'),
-            backgroundColor: Colors.teal,
-          ),
-        );
-      }
-    } on PlatformException catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: ${e.message}'), backgroundColor: Colors.red),
-        );
+      try {
+        final hasOverlay = await _platform.invokeMethod<bool>('hasOverlayPermission') ?? false;
+        if (!hasOverlay) { _showOverlayDialog(); return; }
+        final ok = await _platform.invokeMethod<bool>('startCapture') ?? false;
+        if (ok && mounted) {
+          setState(() => _running = true);
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('🛸 Переклад запущено!'), backgroundColor: Colors.teal));
+        }
+      } on PlatformException catch (e) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Помилка: ${e.message}'), backgroundColor: Colors.red));
       }
     }
   }
 
-  Future<void> _stopService() async {
+  void _showOverlayDialog() => showDialog(context: context, builder: (c) => AlertDialog(
+    backgroundColor: const Color(0xff1a1a1a),
+    title: Text(t('ovt'), style: const TextStyle(color: Colors.cyanAccent)),
+    content: Text(t('ovd')),
+    actions: [
+      TextButton(onPressed: () => Navigator.pop(c), child: const Text('Скасувати')),
+      ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: Colors.cyanAccent),
+        onPressed: () async { Navigator.pop(c); await _platform.invokeMethod('requestOverlayPermission'); },
+        child: Text(t('ovb'), style: const TextStyle(color: Colors.black))),
+    ],
+  ));
+
+  Future<void> _checkUpdate({bool manual = false}) async {
     try {
-      await _platform.invokeMethod('stopCapture');
-      if (mounted) setState(() => isServiceRunning = false);
-    } on PlatformException catch (e) {
-      debugPrint('Stop error: $e');
-    }
-  }
-
-  void _showOverlayPermissionDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xff1a1a1a),
-        title: Text(t('overlay_title'), style: const TextStyle(color: Colors.cyanAccent)),
-        content: Text(t('overlay_desc')),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.cyanAccent),
-            onPressed: () async {
-              Navigator.pop(context);
-              await _platform.invokeMethod('request_overlay_permission');
-            },
-            child: Text(t('overlay_btn'), style: const TextStyle(color: Colors.black)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ===== GitHub Auto-Update =====
-  Future<void> checkForGitHubUpdates() async {
-    try {
-      final result = await UpdateService.check();
-      if (result.hasUpdate && mounted) {
-        _showUpdateDialog(result);
-      }
-    } catch (e) {
-      debugPrint('Update check error: $e');
-    }
-  }
-
-  void _showUpdateDialog(UpdateCheckResult result) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xff1a1a1a),
-        title: Text(t('update_title')),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(t('update_desc')),
-            const SizedBox(height: 12),
-            Text(
-              '${t('version')}: ${result.fullCurrentVersion} → ${result.fullLatestVersion}',
-              style: const TextStyle(color: Colors.cyanAccent),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Later'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.cyanAccent),
-            onPressed: () async {
-              Navigator.pop(context);
-              await UpdateService.openReleaseUrl(result.releaseUrl);
-            },
-            child: Text(t('update_btn'), style: const TextStyle(color: Colors.black)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _checkForUpdatesManually() async {
-    try {
-      final result = await UpdateService.check();
-      if (result.hasUpdate) {
-        _showUpdateDialog(result);
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('${t('uptodate')} (${result.fullCurrentVersion})')),
-          );
+      final info = await PackageInfo.fromPlatform();
+      final r = await http.get(Uri.parse('https://api.github.com/repos/portallcomua/LingoStreamAndroid/releases/latest'));
+      if (r.statusCode == 200) {
+        final j = jsonDecode(r.body);
+        final latest = j['tag_name'].toString().replaceAll('v', '');
+        if (latest != info.version) {
+          _showUpdateDialog(j['html_url'] ?? '');
+        } else if (manual && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('✅ ${info.version} ${t('actual')}')));
         }
       }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('❌ Error: $e')),
-        );
-      }
-    }
+    } catch (e) { debugPrint('update: $e'); }
   }
 
-  Future<void> _launchUrl(String urlString) async {
-    final Uri url = Uri.parse(urlString);
-    try {
-      if (await canLaunchUrl(url)) {
-        await launchUrl(url, mode: LaunchMode.externalApplication);
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
-      }
-    }
+  void _showUpdateDialog(String url) => showDialog(context: context, barrierDismissible: false, builder: (c) => AlertDialog(
+    title: Text(t('upd')), content: Text(t('updd')),
+    actions: [
+      TextButton(onPressed: () => Navigator.pop(c), child: const Text('Пізніше')),
+      ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: Colors.cyanAccent),
+        onPressed: () async { Navigator.pop(c); if (await canLaunchUrl(Uri.parse(url))) await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication); },
+        child: Text(t('updb'), style: const TextStyle(color: Colors.black))),
+    ],
+  ));
+
+  Future<void> _launch(String url) async {
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
-  void _addCustomVideo() {
-    final url = _customUrlController.text.trim();
-    if (url.isEmpty) return;
-    if (!url.startsWith('http://') && !url.startsWith('https://')) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(currentLanguage == 'UK' 
-            ? 'Введіть коректний URL (http:// або https://)' 
-            : 'Enter a valid URL (http:// or https://)')),
-      );
-      return;
-    }
-    setState(() {
-      userMediaList.add(MediaItem(
-        title: '${currentLanguage == 'UK' ? 'Відео' : 'Video'} ${userMediaList.length + 1}',
-        category: currentLanguage == 'UK' ? '🔗 Мої відео' : '🔗 My Videos',
-        url: url,
-        hasSubtitles: true,
-        isCustom: true,
-      ));
-      _customUrlController.clear();
-    });
-    _saveCustomVideos();
+  void _addVideo() {
+    final url = _urlCtrl.text.trim();
+    if (url.isEmpty || (!url.startsWith('http://') && !url.startsWith('https://'))) return;
+    setState(() { _custom.add(MediaItem(title: 'Відео ${_custom.length + 1}', category: '🔗 Мої відео', url: url, isCustom: true)); _urlCtrl.clear(); });
+    _saveCustom();
   }
 
-  void _deleteCustomVideo(int index) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xff1a1a1a),
-        title: Text(t('delete')),
-        content: Text(currentLanguage == 'UK' ? 'Ви впевнені?' : 'Are you sure?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              setState(() => userMediaList.removeAt(index));
-              _saveCustomVideos();
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(t('deleted'))),
-              );
-            },
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
-          ),
-        ],
+  void _deleteVideo(int i) => showDialog(context: context, builder: (c) => AlertDialog(
+    title: Text(t('del')), content: const Text('Ви впевнені?'),
+    actions: [
+      TextButton(onPressed: () => Navigator.pop(c), child: const Text('Ні')),
+      TextButton(onPressed: () { setState(() => _custom.removeAt(i)); _saveCustom(); Navigator.pop(c);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('deleted')))); },
+        child: const Text('Так', style: TextStyle(color: Colors.red))),
+    ],
+  ));
+
+  void _showSettings() => showModalBottomSheet(context: context, backgroundColor: const Color(0xff1a1a1a),
+    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+    builder: (c) => Padding(padding: const EdgeInsets.all(20), child: Column(mainAxisSize: MainAxisSize.min, children: [
+      Text(t('sets'), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.cyanAccent)),
+      const Divider(color: Colors.grey),
+      ListTile(leading: const Icon(Icons.language, color: Colors.cyanAccent), title: Text(t('lang')),
+        trailing: DropdownButton<String>(value: _lang, items: const [
+          DropdownMenuItem(value: 'UK', child: Text('🇺🇦 Українська')),
+          DropdownMenuItem(value: 'EN', child: Text('🇬🇧 English')),
+        ], onChanged: (v) { if (v != null) { setState(() => _lang = v); _saveLang(v); Navigator.pop(c); } })),
+      ListTile(leading: const Icon(Icons.update, color: Colors.cyanAccent), title: Text(t('chk')),
+        onTap: () { Navigator.pop(c); _checkUpdate(manual: true); }),
+      FutureBuilder<PackageInfo>(future: PackageInfo.fromPlatform(),
+        builder: (_, s) => ListTile(leading: const Icon(Icons.info, color: Colors.grey), title: Text('${t('ver')}: ${s.data?.version ?? '...'}')),
       ),
-    );
-  }
-
-  void _showNoSubtitlesWarning() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xff1a1a1a),
-        title: Text(t('no_cc_title'), style: const TextStyle(color: Colors.redAccent)),
-        content: Text(t('no_cc_desc')),
-        actions: [
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
-            onPressed: () => Navigator.pop(context),
-            child: Text(t('btn_close'), style: const TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showSettings() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xff1a1a1a),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => StatefulBuilder(
-        builder: (context, setModalState) => Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                t('settings'),
-                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.cyanAccent),
-              ),
-              const Divider(color: Colors.grey),
-              
-              // Interface Language
-              ListTile(
-                leading: const Icon(Icons.language, color: Colors.cyanAccent),
-                title: Text(t('language')),
-                trailing: DropdownButton<String>(
-                  value: currentLanguage,
-                  items: const [
-                    DropdownMenuItem(value: 'UK', child: Text('🇺🇦 Українська')),
-                    DropdownMenuItem(value: 'EN', child: Text('🇬🇧 English')),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) {
-                      setState(() => currentLanguage = value);
-                      _saveLanguage(value);
-                      setModalState(() {});
-                    }
-                  },
-                ),
-              ),
-              
-              // Translation Source Language
-              ListTile(
-                leading: const Icon(Icons.translate, color: Colors.purpleAccent),
-                title: Text(t('translation_direction')),
-                subtitle: Text('$sourceTranslateLang → $targetTranslateLang'),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    DropdownButton<String>(
-                      value: sourceTranslateLang,
-                      items: const [
-                        DropdownMenuItem(value: 'en', child: Text('EN')),
-                        DropdownMenuItem(value: 'uk', child: Text('UK')),
-                        DropdownMenuItem(value: 'pl', child: Text('PL')),
-                        DropdownMenuItem(value: 'de', child: Text('DE')),
-                        DropdownMenuItem(value: 'es', child: Text('ES')),
-                      ],
-                      onChanged: (value) {
-                        if (value != null) {
-                          sourceTranslateLang = value;
-                          _saveTranslationSettings();
-                          setModalState(() {});
-                          _updateServiceSettings();
-                        }
-                      },
-                    ),
-                    const Text(' → '),
-                    DropdownButton<String>(
-                      value: targetTranslateLang,
-                      items: const [
-                        DropdownMenuItem(value: 'uk', child: Text('UK')),
-                        DropdownMenuItem(value: 'en', child: Text('EN')),
-                        DropdownMenuItem(value: 'pl', child: Text('PL')),
-                        DropdownMenuItem(value: 'de', child: Text('DE')),
-                        DropdownMenuItem(value: 'es', child: Text('ES')),
-                      ],
-                      onChanged: (value) {
-                        if (value != null) {
-                          targetTranslateLang = value;
-                          _saveTranslationSettings();
-                          setModalState(() {});
-                          _updateServiceSettings();
-                        }
-                      },
-                    ),
-                  ],
-                ),
-              ),
-              
-              // Check Updates
-              ListTile(
-                leading: const Icon(Icons.update, color: Colors.cyanAccent),
-                title: Text(t('check_update')),
-                onTap: () {
-                  Navigator.pop(context);
-                  _checkForUpdatesManually();
-                },
-              ),
-              
-              // Version
-              ListTile(
-                leading: const Icon(Icons.info, color: Colors.grey),
-                title: Text('${t('version')}: $_currentVersion ($_currentBuildNumber)'),
-              ),
-              
-              // Privacy Policy
-              ListTile(
-                leading: const Icon(Icons.privacy_tip, color: Colors.grey),
-                title: Text(t('privacy_policy')),
-                onTap: () {
-                  Navigator.pop(context);
-                  _launchUrl(
-                    'https://raw.githubusercontent.com/portallcomua/LingoStreamAndroid/main/PRIVACY_POLICY.md',
-                  );
-                },
-              ),
-              
-              const SizedBox(height: 20),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _updateServiceSettings() async {
-    if (!isServiceRunning) return;
-    try {
-      await _platform.invokeMethod('updateSettings', {
-        'mode': selectedMode,
-        'targetLang': targetTranslateLang,
-        'sourceLang': sourceTranslateLang,
-      });
-    } catch (e) {
-      debugPrint('Update settings error: $e');
-    }
-  }
+      ListTile(leading: const Icon(Icons.privacy_tip, color: Colors.grey), title: Text(t('pp')),
+        onTap: () { Navigator.pop(c); _launch('https://github.com/portallcomua/LingoStreamAndroid/blob/main/PRIVACY_POLICY.md'); }),
+      const SizedBox(height: 20),
+    ])));
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Row(
-          children: [
-            Image.asset(
-              'assets/logo.png',
-              height: 30,
-              errorBuilder: (_, __, ___) => const Icon(Icons.translate, color: Colors.cyanAccent),
-            ),
-            const SizedBox(width: 10),
-            Text(t('app_title')),
-          ],
-        ),
-        backgroundColor: const Color(0xff141414),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings, color: Colors.cyanAccent),
-            onPressed: _showSettings,
-          ),
-          const SizedBox(width: 5),
-        ],
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                Expanded(
-                  child: IndexedStack(
-                    index: _currentTab,
-                    children: [_buildMainScreen(), _buildMediaScreen()],
-                  ),
-                ),
-                Container(
-                  width: double.infinity,
-                  height: 50,
-                  color: Colors.purple.withOpacity(0.15),
-                  child: Center(
-                    child: Text(
-                      t('ad_banner'),
-                      style: const TextStyle(
-                        fontSize: 10,
-                        color: Colors.purpleAccent,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1.1,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentTab,
-        onTap: (index) => setState(() => _currentTab = index),
-        selectedItemColor: Colors.cyanAccent,
-        backgroundColor: const Color(0xff141414),
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.flash_on), label: '⚡'),
-          BottomNavigationBarItem(icon: Icon(Icons.video_library), label: '🎬'),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: Row(children: [
+      Image.asset('assets/logo.png', height: 28, errorBuilder: (_, __, ___) => const Icon(Icons.translate, color: Colors.cyanAccent)),
+      const SizedBox(width: 8), Text(t('title')),
+    ]), actions: [IconButton(icon: const Icon(Icons.settings, color: Colors.cyanAccent), onPressed: _showSettings)]),
+    body: _loading ? const Center(child: CircularProgressIndicator()) : Column(children: [
+      Expanded(child: IndexedStack(index: _tab, children: [_mainScreen(), _mediaScreen()])),
+      Container(height: 48, color: Colors.purple.withOpacity(0.15),
+        child: Center(child: Text(t('ad'), style: const TextStyle(fontSize: 10, color: Colors.purpleAccent, fontWeight: FontWeight.bold)))),
+    ]),
+    bottomNavigationBar: BottomNavigationBar(currentIndex: _tab, onTap: (i) => setState(() => _tab = i),
+      selectedItemColor: Colors.cyanAccent, backgroundColor: const Color(0xff141414),
+      items: const [BottomNavigationBarItem(icon: Icon(Icons.flash_on), label: '⚡'), BottomNavigationBarItem(icon: Icon(Icons.video_library), label: '🎬')]),
+  );
 
-  Widget _buildMainScreen() {
-    return Padding(
-      padding: const EdgeInsets.all(20.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Status
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: isServiceRunning ? Colors.teal.withOpacity(0.2) : Colors.grey.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: isServiceRunning ? Colors.tealAccent : Colors.grey.shade700,
-              ),
-            ),
-            child: Column(
-              children: [
-                Text(
-                  isServiceRunning ? t('status_on') : t('status_off'),
-                  style: TextStyle(
-                    fontSize: 15,
-                    color: isServiceRunning ? Colors.tealAccent : Colors.grey,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                if (isServiceRunning) ...[
-                  const SizedBox(height: 6),
-                  Text(
-                    '$sourceTranslateLang → $targetTranslateLang | $selectedMode',
-                    style: const TextStyle(color: Colors.purpleAccent, fontSize: 12),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-              ],
-            ),
-          ),
-          
-          if (isServiceRunning) ...[
-            const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: Colors.blue.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                t('hint_active'),
-                style: const TextStyle(color: Colors.lightBlueAccent, fontSize: 13),
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ],
-          
-          // START/STOP Button
-          Expanded(
-            child: Center(
-              child: GestureDetector(
-                onTap: _toggleService,
-                child: Container(
-                  width: 130,
-                  height: 130,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: isServiceRunning ? Colors.redAccent : Colors.cyanAccent,
-                    boxShadow: [
-                      BoxShadow(
-                        color: (isServiceRunning ? Colors.redAccent : Colors.cyanAccent).withOpacity(0.4),
-                        blurRadius: 25,
-                        spreadRadius: 5,
-                      ),
-                    ],
-                  ),
-                  child: Icon(
-                    isServiceRunning ? Icons.stop : Icons.play_arrow,
-                    size: 60,
-                    color: Colors.black,
-                  ),
-                ),
-              ),
-            ),
-          ),
-          
-          Text(
-            t('mode_title'),
-            style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold),
-          ),
-          RadioListTile<String>(
-            title: Text(t('mode_movie')),
-            value: 'movie',
-            groupValue: selectedMode,
-            onChanged: (v) {
-              setState(() => selectedMode = v!);
-              _updateServiceSettings();
-            },
-          ),
-          RadioListTile<String>(
-            title: Text(t('mode_pop')),
-            value: 'pop',
-            groupValue: selectedMode,
-            onChanged: (v) {
-              setState(() => selectedMode = v!);
-              _updateServiceSettings();
-            },
-          ),
-          RadioListTile<String>(
-            title: Text(t('mode_rock')),
-            value: 'rock',
-            groupValue: selectedMode,
-            onChanged: (v) {
-              setState(() => selectedMode = v!);
-              _updateServiceSettings();
-            },
-          ),
-        ],
-      ),
-    );
-  }
+  Widget _mainScreen() => Padding(padding: const EdgeInsets.all(20), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+    Container(padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: _running ? Colors.teal.withOpacity(0.2) : Colors.grey.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(10), border: Border.all(color: _running ? Colors.tealAccent : Colors.grey.shade700)),
+      child: Text(_running ? t('on') : t('off'), style: TextStyle(fontSize: 15, color: _running ? Colors.tealAccent : Colors.grey, fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
+    if (_running) ...[const SizedBox(height: 10), Container(padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(color: Colors.blue.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+      child: Text(t('hint'), style: const TextStyle(color: Colors.lightBlueAccent, fontSize: 13), textAlign: TextAlign.center))],
+    Expanded(child: Center(child: GestureDetector(onTap: _toggleService, child: Container(width: 130, height: 130,
+      decoration: BoxDecoration(shape: BoxShape.circle, color: _running ? Colors.redAccent : Colors.cyanAccent,
+        boxShadow: [BoxShadow(color: (_running ? Colors.redAccent : Colors.cyanAccent).withOpacity(0.4), blurRadius: 25, spreadRadius: 5)]),
+      child: Icon(_running ? Icons.stop : Icons.play_arrow, size: 60, color: Colors.black))))),
+    Text(t('mode'), style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+    RadioListTile(title: Text(t('m1')), value: 'movie', groupValue: _mode, onChanged: (v) => setState(() => _mode = v!)),
+    RadioListTile(title: Text(t('m2')), value: 'pop', groupValue: _mode, onChanged: (v) => setState(() => _mode = v!)),
+    RadioListTile(title: Text(t('m3')), value: 'rock', groupValue: _mode, onChanged: (v) => setState(() => _mode = v!)),
+  ]));
 
-  Widget _buildMediaScreen() {
-    final allVideos = [...predefinedMedia, ...userMediaList];
-    return Padding(
-      padding: const EdgeInsets.all(15.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            t('media_title'),
-            style: const TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: Colors.cyanAccent,
-            ),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _customUrlController,
-                  decoration: InputDecoration(
-                    filled: true,
-                    fillColor: const Color(0xff141414),
-                    hintText: t('add_custom'),
-                    suffixIcon: IconButton(
-                      icon: const Icon(Icons.clear, color: Colors.grey, size: 18),
-                      onPressed: () => _customUrlController.clear(),
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide.none,
-                    ),
-                  ),
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.add_circle, color: Colors.cyanAccent, size: 35),
-                onPressed: _addCustomVideo,
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Expanded(
-            child: allVideos.isEmpty
-                ? Center(
-                    child: Text(
-                      t('no_videos'),
-                      style: const TextStyle(color: Colors.grey, fontSize: 16),
-                    ),
-                  )
-                : ListView.builder(
-                    itemCount: allVideos.length,
-                    itemBuilder: (context, index) {
-                      final item = allVideos[index];
-                      return Card(
-                        color: const Color(0xff141414),
-                        child: ListTile(
-                          leading: Icon(
-                            item.category.contains('Rock')
-                                ? Icons.album
-                                : item.category.contains('TED')
-                                    ? Icons.record_voice_over
-                                    : item.category.contains('BBC')
-                                        ? Icons.newspaper
-                                        : item.category.contains('Мої') || item.category.contains('My')
-                                            ? Icons.person
-                                            : Icons.movie,
-                            color: Colors.purpleAccent,
-                          ),
-                          title: Text(
-                            item.title,
-                            style: const TextStyle(fontSize: 14),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          subtitle: Text(
-                            "${item.category} • ${item.hasSubtitles ? 'CC ✅' : '⚠️ No CC'}",
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: item.hasSubtitles ? Colors.grey : Colors.redAccent,
-                            ),
-                          ),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (item.isCustom)
-                                IconButton(
-                                  icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-                                  onPressed: () => _deleteCustomVideo(userMediaList.indexOf(item)),
-                                ),
-                              Icon(
-                                item.hasSubtitles ? Icons.play_circle_outline : Icons.error_outline,
-                                color: item.hasSubtitles ? Colors.cyanAccent : Colors.redAccent,
-                              ),
-                            ],
-                          ),
-                          onTap: () async {
-                            if (!item.hasSubtitles) {
-                              _showNoSubtitlesWarning();
-                              return;
-                            }
-                            await _launchUrl(item.url);
-                          },
-                        ),
-                      );
-                    },
-                  ),
-          ),
-        ],
-      ),
-    );
+  Widget _mediaScreen() {
+    final all = [..._predefined, ..._custom];
+    return Padding(padding: const EdgeInsets.all(15), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(t('media'), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.cyanAccent)),
+      const SizedBox(height: 10),
+      Row(children: [
+        Expanded(child: TextField(controller: _urlCtrl, decoration: InputDecoration(filled: true, fillColor: const Color(0xff141414),
+          hintText: t('add'), border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+          suffixIcon: IconButton(icon: const Icon(Icons.clear, size: 18, color: Colors.grey), onPressed: _urlCtrl.clear)))),
+        IconButton(icon: const Icon(Icons.add_circle, color: Colors.cyanAccent, size: 35), onPressed: _addVideo),
+      ]),
+      const SizedBox(height: 10),
+      Expanded(child: all.isEmpty ? Center(child: Text(t('novid'), style: const TextStyle(color: Colors.grey)))
+        : ListView.builder(itemCount: all.length, itemBuilder: (_, i) {
+          final item = all[i];
+          return Card(color: const Color(0xff141414), child: ListTile(
+            leading: Icon(item.category.contains('Rock') || item.category.contains('🎸') ? Icons.album : item.category.contains('TED') ? Icons.record_voice_over : item.isCustom ? Icons.person : Icons.movie, color: Colors.purpleAccent),
+            title: Text(item.title, style: const TextStyle(fontSize: 14), overflow: TextOverflow.ellipsis),
+            subtitle: Text('${item.category} • ${item.hasSubtitles ? 'CC ✅' : '⚠️ No CC'}', style: TextStyle(fontSize: 11, color: item.hasSubtitles ? Colors.grey : Colors.redAccent)),
+            trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+              if (item.isCustom) IconButton(icon: const Icon(Icons.delete, color: Colors.red, size: 20), onPressed: () => _deleteVideo(_custom.indexOf(item))),
+              Icon(item.hasSubtitles ? Icons.play_circle_outline : Icons.error_outline, color: item.hasSubtitles ? Colors.cyanAccent : Colors.redAccent),
+            ]),
+            onTap: () { if (!item.hasSubtitles) { showDialog(context: context, builder: (c) => AlertDialog(title: Text(t('nocc'), style: const TextStyle(color: Colors.redAccent)), content: Text(t('noccd')), actions: [ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent), onPressed: () => Navigator.pop(c), child: Text(t('ok')))])); return; } _launch(item.url); },
+          ));
+        })),
+    ]));
   }
 }
