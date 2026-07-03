@@ -31,6 +31,43 @@ jobs:
           flutter --version
           flutter pub get
           flutter create --platforms=android .
+          
+          # Автоматичне налаштування AdMob та minSdkVersion після генерації папки android
+          python3 -c "
+          import os
+
+          # 1. Додавання AdMob App ID в AndroidManifest.xml
+          manifest_path = 'android/app/src/main/AndroidManifest.xml'
+          if os.path.exists(manifest_path):
+              with open(manifest_path, 'r', encoding='utf-8') as f:
+                  content = f.read()
+              
+              # Стандартний тестовий AdMob ID для успішної збірки
+              admob_tag = '\n        <meta-data\n            android:name=\"com.google.android.gms.ads.APPLICATION_ID\"\n            android:value=\"ca-app-pub-3940256099942544~3347511713\"/>'
+              
+              if 'com.google.android.gms.ads.APPLICATION_ID' not in content:
+                  content = content.replace('<application', '<application' + admob_tag)
+                  with open(manifest_path, 'w', encoding='utf-8') as f:
+                      f.write(content)
+                  print('✅ AndroidManifest.xml успішно оновлено тестовим AdMob App ID.')
+
+          # 2. Оновлення minSdkVersion до 21 для підтримки Google ML Kit
+          gradle_path = 'android/app/build.gradle'
+          if os.path.exists(gradle_path):
+              with open(gradle_path, 'r', encoding='utf-8') as f:
+                  content = f.read()
+              
+              # Заміна версії minSdkVersion на 21
+              content = content.replace('minSdkVersion flutter.minSdkVersion', 'minSdkVersion 21')
+              content = content.replace('minSdkVersion = flutter.minSdkVersion', 'minSdkVersion = 21')
+              
+              with open(gradle_path, 'w', encoding='utf-8') as f:
+                  f.write(content)
+              print('✅ build.gradle успішно оновлено (minSdkVersion встановлено на 21).')
+          "
+
+      - name: Generate Launcher Icons
+        run: dart run flutter_launcher_icons
 
       - name: Build Android APK
         run: flutter build apk --release
