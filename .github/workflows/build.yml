@@ -41,22 +41,21 @@ jobs:
           echo "storeFile=app/upload-keystore.jks" >> android/key.properties
           
           # Автоматичне налаштування minSdkVersion, signingConfigs та версії Kotlin після генерації папки android
-          python3 -c "
+          cat << 'EOF' | sed 's/^          //' > configure_android.py
           import os
           import re
 
-          # 1. Оновлення minSdkVersion до 21 для підтримки Google ML Kit та налаштування signingConfigs
+          # 1. Оновлення minSdkVersion до 21 та налаштування signingConfigs
           gradle_path = 'android/app/build.gradle'
           if os.path.exists(gradle_path):
               with open(gradle_path, 'r', encoding='utf-8') as f:
                   content = f.read()
               
               # Заміна версії minSdkVersion на 21
-              content = content.replace('minSdkVersion flutter.minSdkVersion', 'minSdkVersion 21')
-              content = content.replace('minSdkVersion = flutter.minSdkVersion', 'minSdkVersion = 21')
+              content = re.sub(r'minSdkVersion\s*=?\s*flutter\.minSdkVersion', 'minSdkVersion 21', content)
               
               # Додавання signingConfigs block перед buildTypes
-              signing_configs_code = '\n    signingConfigs {\n        release {\n            storeFile file(\"upload-keystore.jks\")\n            storePassword \"mypassword\"\n            keyAlias \"upload\"\n            keyPassword \"mypassword\"\n        }\n    }\n\n'
+              signing_configs_code = '\n    signingConfigs {\n        release {\n            storeFile file("upload-keystore.jks")\n            storePassword "mypassword"\n            keyAlias "upload"\n            keyPassword "mypassword"\n        }\n    }\n\n'
               
               if 'signingConfigs {' not in content:
                   if 'buildTypes {' in content:
@@ -70,10 +69,7 @@ jobs:
                   parts = content.split('buildTypes {', 1)
                   if 'release {' in parts[1]:
                       pre_release, post_release = parts[1].split('release {', 1)
-                      updated_post_release = post_release
-                      for debug_conf in ['signingConfig signingConfigs.debug', 'signingConfig = signingConfigs.debug']:
-                          if debug_conf in updated_post_release:
-                              updated_post_release = updated_post_release.replace(debug_conf, 'signingConfig signingConfigs.release')
+                      updated_post_release = re.sub(r'signingConfig\s*=?\s*signingConfigs\.debug', 'signingConfig signingConfigs.release', post_release)
                       parts[1] = pre_release + 'release {' + updated_post_release
                       content = 'buildTypes {'.join(parts)
                       print('✅ signingConfig updated to release.')
@@ -89,10 +85,14 @@ jobs:
                   content = f.read()
               
               # Оновлення ext.kotlin_version
-              content = re.sub(r\"ext\.kotlin_version\s*=\s*['\\\"].*?['\\\"]\", \"ext.kotlin_version = '1.9.24'\", content)
-              content = re.sub(r\"kotlin_version\s*=\s*['\\\"].*?['\\\"]\", \"kotlin_version = '1.9.24'\", content)
+              content = re.sub(r"ext\.kotlin_version\s*=\s*['\"].*?['\"]", "ext.kotlin_version = '1.9.24'", content)
+              content = re.sub(r"kotlin_version\s*=\s*['\"].*?['\"]", "kotlin_version = '1.9.24'", content)
               # Оновлення org.jetbrains.kotlin.android plugin якщо він в build.gradle
-              content = re.sub(r'id\s+[\"\\\']org\.jetbrains\.kotlin\.android[\"\\\']\s+version\s+[\"\\\'].*?[\"\\\']', 'id \"org.jetbrains.kotlin.android\" version \"1.9.24\"', content)
+              content = re.sub(
+                  r'(id\s+["\']org\.jetbrains\.kotlin\.android["\']\s+version\s+["\']).*?(["\'])',
+                  r'\g<1>1.9.24\g<2>',
+                  content
+              )
               
               with open(build_gradle_path, 'w', encoding='utf-8') as f:
                   f.write(content)
@@ -104,12 +104,18 @@ jobs:
                   content = f.read()
               
               # Оновлення org.jetbrains.kotlin.android plugin якщо він в settings.gradle
-              content = re.sub(r'id\s+[\"\\\']org\.jetbrains\.kotlin\.android[\"\\\']\s+version\s+[\"\\\'].*?[\"\\\']', 'id \"org.jetbrains.kotlin.android\" version \"1.9.24\"', content)
+              content = re.sub(
+                  r'(id\s+["\']org\.jetbrains\.kotlin\.android["\']\s+version\s+["\']).*?(["\'])',
+                  r'\g<1>1.9.24\g<2>',
+                  content
+              )
               
               with open(settings_gradle_path, 'w', encoding='utf-8') as f:
                   f.write(content)
               print('✅ android/settings.gradle успішно оновлено (Kotlin встановлено на 1.9.24).')
-          "
+          EOF
+          python3 configure_android.py
+          rm configure_android.py
 
       - name: Ensure Launcher Icon Exists
         run: |
