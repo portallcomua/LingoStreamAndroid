@@ -30,44 +30,81 @@ jobs:
         run: |
           flutter --version
           flutter pub get
-          flutter create --platforms=android .
+          flutter create --platforms=android --org com.portallcomua --project-name lingostream .
           
-          # Автоматичне налаштування AdMob та minSdkVersion після генерації папки android
+          # Генерація Keystore для підпису APK та створення key.properties
+          keytool -genkey -v -keystore android/app/upload-keystore.jks -keyalg RSA -keysize 2048 -validity 10000 -alias upload -storepass mypassword -keypass mypassword -dname "CN=LingoStream, O=Portal, C=UA"
+          
+          echo "storePassword=mypassword" > android/key.properties
+          echo "keyPassword=mypassword" >> android/key.properties
+          echo "keyAlias=upload" >> android/key.properties
+          echo "storeFile=app/upload-keystore.jks" >> android/key.properties
+          
+          # Автоматичне налаштування AdMob, minSdkVersion та signingConfigs після генерації папки android
           python3 -c "
           import os
-          import re
 
-          # 1. Додавання AdMob App ID в AndroidManifest.xml у правильне місце
+          # 1. Додавання AdMob App ID в AndroidManifest.xml (безпечно перед </application>)
           manifest_path = 'android/app/src/main/AndroidManifest.xml'
           if os.path.exists(manifest_path):
               with open(manifest_path, 'r', encoding='utf-8') as f:
                   content = f.read()
               
-              # Створюємо блок метаданих AdMob та закриваємо тег application
-              admob_tag = '\n        <meta-data\n            android:name=\"com.google.android.gms.ads.APPLICATION_ID\"\n            android:value=\"ca-app-pub-3940256099942544~3347511713\"/>\n    </application>'
+              admob_tag = '\n        <meta-data\n            android:name=\"com.google.android.gms.ads.APPLICATION_ID\"\n            android:value=\"ca-app-pub-3940256099942544~3347511713\"/>'
               
               if 'com.google.android.gms.ads.APPLICATION_ID' not in content:
-                  content = content.replace('</application>', admob_tag)
+                  content = content.replace('</application>', admob_tag + '\n    </application>')
                   with open(manifest_path, 'w', encoding='utf-8') as f:
                       f.write(content)
                   print('✅ AndroidManifest.xml успішно оновлено тестовим AdMob App ID.')
 
-          # 2. Оновлення minSdkVersion до 21 для підтримки Google ML Kit
+          # 2. Оновлення minSdkVersion до 21 для підтримки Google ML Kit та налаштування signingConfigs
           gradle_path = 'android/app/build.gradle'
           if os.path.exists(gradle_path):
               with open(gradle_path, 'r', encoding='utf-8') as f:
                   content = f.read()
               
-              # Заміна версії minSdkVersion на 21 з урахуванням різних можливих форматів запису
-              content = re.sub(r'minSdkVersion\s+flutter\.minSdkVersion', 'minSdkVersion 21', content)
-              content = re.sub(r'minSdkVersion\s*=\s*flutter\.minSdkVersion', 'minSdkVersion = 21', content)
-              content = re.sub(r'minSdkVersion\s+localProperties\.getProperty\([^\)]+\)', 'minSdkVersion 21', content)
-              content = re.sub(r'minSdkVersion\s*=\s*localProperties\.getProperty\([^\)]+\)', 'minSdkVersion = 21', content)
+              # Заміна версії minSdkVersion на 21
+              content = content.replace('minSdkVersion flutter.minSdkVersion', 'minSdkVersion 21')
+              content = content.replace('minSdkVersion = flutter.minSdkVersion', 'minSdkVersion = 21')
+              
+              # Додавання signingConfigs block перед buildTypes
+              signing_configs_code = '\n    signingConfigs {\n        release {\n            storeFile file(\"upload-keystore.jks\")\n            storePassword \"mypassword\"\n            keyAlias \"upload\"\n            keyPassword \"mypassword\"\n        }\n    }\n\n'
+              
+              if 'signingConfigs {' not in content:
+                  if 'buildTypes {' in content:
+                      content = content.replace('buildTypes {', signing_configs_code + '    buildTypes {')
+                      print('✅ signingConfigs block added successfully.')
+                  else:
+                      print('⚠️ Error: buildTypes block not found')
+              
+              # Оновлення signingConfig у release до signingConfigs.release
+              if 'buildTypes {' in content:
+                  parts = content.split('buildTypes {', 1)
+                  if 'release {' in parts[1]:
+                      pre_release, post_release = parts[1].split('release {', 1)
+                      updated_post_release = post_release
+                      for debug_conf in ['signingConfig signingConfigs.debug', 'signingConfig = signingConfigs.debug']:
+                          if debug_conf in updated_post_release:
+                              updated_post_release = updated_post_release.replace(debug_conf, 'signingConfig signingConfigs.release')
+                      parts[1] = pre_release + 'release {' + updated_post_release
+                      content = 'buildTypes {'.join(parts)
+                      print('✅ signingConfig updated to release.')
               
               with open(gradle_path, 'w', encoding='utf-8') as f:
                   f.write(content)
-              print('✅ build.gradle успішно оновлено (minSdkVersion встановлено на 21).')
+              print('✅ build.gradle успішно оновлено.')
           "
+
+      - name: Ensure Launcher Icon Exists
+        run: |
+          mkdir -p assets
+          if [ ! -f "assets/logo.png" ]; then
+            echo "Creating dummy placeholder logo.png"
+            echo "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" | base64 -d > assets/logo.png
+          else
+            echo "✅ Launcher icon assets/logo.png already exists."
+          fi
 
       - name: Generate Launcher Icons
         run: dart run flutter_launcher_icons
