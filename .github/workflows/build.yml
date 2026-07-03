@@ -30,24 +30,24 @@ jobs:
         run: |
           flutter --version
           flutter pub get
-          # Додано параметр --project-name=lingostream для уникнення помилки назви папки LingoStreamAndroid
-          flutter create --project-name=lingostream --platforms=android .
+          flutter create --platforms=android .
           
           # Автоматичне налаштування AdMob та minSdkVersion після генерації папки android
           python3 -c "
           import os
+          import re
 
-          # 1. Додавання AdMob App ID в AndroidManifest.xml
+          # 1. Додавання AdMob App ID в AndroidManifest.xml у правильне місце
           manifest_path = 'android/app/src/main/AndroidManifest.xml'
           if os.path.exists(manifest_path):
               with open(manifest_path, 'r', encoding='utf-8') as f:
                   content = f.read()
               
-              # Стандартний тестовий AdMob ID для успішної збірки
-              admob_tag = '\n        <meta-data\n            android:name=\"com.google.android.gms.ads.APPLICATION_ID\"\n            android:value=\"ca-app-pub-3940256099942544~3347511713\"/>'
+              # Створюємо блок метаданих AdMob та закриваємо тег application
+              admob_tag = '\n        <meta-data\n            android:name=\"com.google.android.gms.ads.APPLICATION_ID\"\n            android:value=\"ca-app-pub-3940256099942544~3347511713\"/>\n    </application>'
               
               if 'com.google.android.gms.ads.APPLICATION_ID' not in content:
-                  content = content.replace('<application', '<application' + admob_tag)
+                  content = content.replace('</application>', admob_tag)
                   with open(manifest_path, 'w', encoding='utf-8') as f:
                       f.write(content)
                   print('✅ AndroidManifest.xml успішно оновлено тестовим AdMob App ID.')
@@ -58,9 +58,11 @@ jobs:
               with open(gradle_path, 'r', encoding='utf-8') as f:
                   content = f.read()
               
-              # Заміна версії minSdkVersion на 21
-              content = content.replace('minSdkVersion flutter.minSdkVersion', 'minSdkVersion 21')
-              content = content.replace('minSdkVersion = flutter.minSdkVersion', 'minSdkVersion = 21')
+              # Заміна версії minSdkVersion на 21 з урахуванням різних можливих форматів запису
+              content = re.sub(r'minSdkVersion\s+flutter\.minSdkVersion', 'minSdkVersion 21', content)
+              content = re.sub(r'minSdkVersion\s*=\s*flutter\.minSdkVersion', 'minSdkVersion = 21', content)
+              content = re.sub(r'minSdkVersion\s+localProperties\.getProperty\([^\)]+\)', 'minSdkVersion 21', content)
+              content = re.sub(r'minSdkVersion\s*=\s*localProperties\.getProperty\([^\)]+\)', 'minSdkVersion = 21', content)
               
               with open(gradle_path, 'w', encoding='utf-8') as f:
                   f.write(content)
