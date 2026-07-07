@@ -32,25 +32,20 @@ jobs:
 
       - name: Patch app/build.gradle
         run: |
-          python3 << 'PATCHEOF'
-          with open('android/app/build.gradle') as f:
-              g = f.read()
-          g = g.replace('minSdk flutter.minSdkVersion', 'minSdk 23')
-          g = g.replace('minSdkVersion flutter.minSdkVersion', 'minSdkVersion 23')
-          if 'com.google.mlkit' not in g:
-              g = g.replace('dependencies {', 'dependencies {\n    implementation "com.google.mlkit:text-recognition:16.0.0"')
-          with open('android/app/build.gradle', 'w') as f:
-              f.write(g)
-          print('Patched OK')
-          print([l.strip() for l in g.splitlines() if 'minSdk' in l or 'mlkit' in l])
-          PATCHEOF
+          sed -i 's/minSdk flutter.minSdkVersion/minSdk 23/' android/app/build.gradle
+          sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 23/' android/app/build.gradle
+          sed -i '/^dependencies {/a\    implementation "com.google.mlkit:text-recognition:16.0.0"' android/app/build.gradle
+          echo "=== build.gradle deps ==="
+          grep -E "minSdk|mlkit|dependencies" android/app/build.gradle
+
       - name: Fix Kotlin version
         run: |
-          sed -i "s/version \"1\.[0-9]*\.[0-9]*/version \"1.9.24/g" android/settings.gradle
+          sed -i 's/version \"1\.[0-9]*\.[0-9]*/version \"1.9.24/g' android/settings.gradle
           grep "kotlin.android" android/settings.gradle
+
       - name: Write AndroidManifest
         run: |
-          cat > android/app/src/main/AndroidManifest.xml << 'EOF'
+          cat > android/app/src/main/AndroidManifest.xml << 'MANIFEST'
           <manifest xmlns:android="http://schemas.android.com/apk/res/android"
               package="com.example.lingostream">
               <uses-permission android:name="android.permission.INTERNET" />
@@ -87,12 +82,12 @@ jobs:
                   <meta-data android:name="flutterEmbedding" android:value="2"/>
               </application>
           </manifest>
-          EOF
+          MANIFEST
 
       - name: Write MainActivity.kt
         run: |
           mkdir -p android/app/src/main/kotlin/com/example/lingostream
-          cat > android/app/src/main/kotlin/com/example/lingostream/MainActivity.kt << 'EOF'
+          cat > android/app/src/main/kotlin/com/example/lingostream/MainActivity.kt << 'KOTLIN'
           package com.example.lingostream
           import android.app.Activity
           import android.content.Context
@@ -151,11 +146,11 @@ jobs:
                   }
               }
           }
-          EOF
+          KOTLIN
 
       - name: Write ScreenCaptureService.kt
         run: |
-          cat > android/app/src/main/kotlin/com/example/lingostream/ScreenCaptureService.kt << 'EOF'
+          cat > android/app/src/main/kotlin/com/example/lingostream/ScreenCaptureService.kt << 'KOTLIN'
           package com.example.lingostream
           import android.app.Notification
           import android.app.NotificationChannel
@@ -237,7 +232,7 @@ jobs:
               private fun initOverlay() {
                   val wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
                   overlay = TextView(this).apply {
-                      text = "🛸 Очікування субтитрів..."
+                      text = "Очікування субтитрів..."
                       textSize = 16f
                       setTextColor(android.graphics.Color.WHITE)
                       setBackgroundColor(android.graphics.Color.parseColor("#DD000000"))
@@ -247,8 +242,8 @@ jobs:
                       WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
                   else @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_PHONE
                   val p = WindowManager.LayoutParams(
-                      WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.WRAP_CONTENT,
-                      type, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+                      WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.WRAP_CONTENT, type,
+                      WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
                       PixelFormat.TRANSLUCENT).apply { gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL; y = 120 }
                   main.post { wm.addView(overlay, p) }
               }
@@ -270,10 +265,8 @@ jobs:
                                   lastTxt = txt
                                   bg.post {
                                       val tr = translate(txt)
-                                      main.post { overlay?.text = if (tr != txt) "🌐 $tr" else "⚠️ Субтитри не знайдено" }
+                                      main.post { overlay?.text = if (tr != txt) tr else txt }
                                   }
-                              } else if (txt.isEmpty()) {
-                                  main.post { overlay?.text = "👁 Сканування..." }
                               }
                               crop.recycle()
                           }
@@ -299,7 +292,7 @@ jobs:
                       Intent(this, ScreenCaptureService::class.java).apply { action = "STOP" },
                       PendingIntent.FLAG_IMMUTABLE)
                   return NotificationCompat.Builder(this, "LS")
-                      .setContentTitle("🛸 LingoStream AI").setContentText("Переклад активний")
+                      .setContentTitle("LingoStream AI").setContentText("Переклад активний")
                       .setSmallIcon(android.R.drawable.ic_dialog_info)
                       .addAction(android.R.drawable.ic_delete, "Зупинити", si)
                       .setOngoing(true).build()
@@ -307,7 +300,7 @@ jobs:
               override fun onBind(i: Intent?) = null
               override fun onDestroy() { running = false; cleanup(); bgt.quitSafely(); super.onDestroy() }
           }
-          EOF
+          KOTLIN
 
       - name: Install dependencies
         run: flutter pub get
