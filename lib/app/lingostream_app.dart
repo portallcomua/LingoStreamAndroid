@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'screens/dashboard_screen.dart';
+import '../screens/dashboard_screen.dart';
 
 class LingoStreamApp extends StatelessWidget {
   const LingoStreamApp({super.key});
