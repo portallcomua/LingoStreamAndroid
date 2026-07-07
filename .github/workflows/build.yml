@@ -66,14 +66,19 @@ jobs:
 
       - name: Fix Kotlin version
         run: |
-          python3 -c "
-import re
-with open('android/settings.gradle') as f: s = f.read()
-s = re.sub(r'id [\x22\x27]org\.jetbrains\.kotlin\.android[\x22\x27] version [\x22\x27][^\x22\x27]+[\x22\x27]',
-           'id \"org.jetbrains.kotlin.android\" version \"1.9.24\"', s)
-with open('android/settings.gradle','w') as f: f.write(s)
-print('Kotlin patched')
-"
+          python3 << 'PYEOF'
+          import re
+          with open('android/settings.gradle') as f:
+              s = f.read()
+          s = re.sub(
+              r'id .org\.jetbrains\.kotlin\.android. version .[^.]+.',
+              'id "org.jetbrains.kotlin.android" version "1.9.24"',
+              s
+          )
+          with open('android/settings.gradle', 'w') as f:
+              f.write(s)
+          print('Kotlin 1.9.24 patched')
+          PYEOF
 
       - name: Write AndroidManifest
         run: |
@@ -300,7 +305,7 @@ print('Kotlin patched')
                                       main.post { overlay?.text = if (tr != txt) "🌐 $tr" else "⚠️ Субтитри не знайдено" }
                                   }
                               } else if (txt.isEmpty()) {
-                                  main.post { overlay?.text = "👁 Сканування... (субтитри не виявлено)" }
+                                  main.post { overlay?.text = "👁 Сканування..." }
                               }
                               crop.recycle()
                           }
