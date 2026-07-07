@@ -30,40 +30,20 @@ jobs:
           flutter create . --platforms=android --project-name=lingostream
           mv pubspec.yaml.bak pubspec.yaml
 
-      - name: Write app/build.gradle
+      - name: Patch app/build.gradle
         run: |
-          cat > android/app/build.gradle << 'GRADLE'
-          plugins {
-              id "com.android.application"
-              id "kotlin-android"
-              id "dev.flutter.flutter-gradle-plugin"
-          }
-          android {
-              namespace "com.example.lingostream"
-              compileSdk flutter.compileSdkVersion
-              ndkVersion flutter.ndkVersion
-              compileOptions {
-                  sourceCompatibility JavaVersion.VERSION_1_8
-                  targetCompatibility JavaVersion.VERSION_1_8
-              }
-              kotlinOptions { jvmTarget = "1.8" }
-              defaultConfig {
-                  applicationId "com.example.lingostream"
-                  minSdk 23
-                  targetSdk flutter.targetSdkVersion
-                  versionCode flutterVersionCode.toInteger()
-                  versionName flutterVersionName
-              }
-              buildTypes {
-                  release { signingConfig signingConfigs.debug }
-              }
-          }
-          flutter { source "../.." }
-          dependencies {
-              implementation "com.google.mlkit:text-recognition:16.0.0"
-          }
-          GRADLE
-
+          python3 << 'PATCHEOF'
+          with open('android/app/build.gradle') as f:
+              g = f.read()
+          g = g.replace('minSdk flutter.minSdkVersion', 'minSdk 23')
+          g = g.replace('minSdkVersion flutter.minSdkVersion', 'minSdkVersion 23')
+          if 'com.google.mlkit' not in g:
+              g = g.replace('dependencies {', 'dependencies {\n    implementation "com.google.mlkit:text-recognition:16.0.0"')
+          with open('android/app/build.gradle', 'w') as f:
+              f.write(g)
+          print('Patched OK')
+          print([l.strip() for l in g.splitlines() if 'minSdk' in l or 'mlkit' in l])
+          PATCHEOF
       - name: Fix Kotlin version
         run: |
           sed -i "s/version \"1\.[0-9]*\.[0-9]*/version \"1.9.24/g" android/settings.gradle
