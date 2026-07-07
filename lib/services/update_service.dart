@@ -1,4 +1,5 @@
 import 'dart:convert';
+
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -24,13 +25,12 @@ class UpdateCheckResult {
     this.error,
   });
 
-  String get fullCurrentVersion => 
+  String get fullCurrentVersion =>
       currentBuildNumber.isNotEmpty ? '$currentVersion ($currentBuildNumber)' : currentVersion;
-  
-  String get fullLatestVersion => 
-      (latestBuildNumber != null && latestBuildNumber!.isNotEmpty) 
-          ? '$latestVersion ($latestBuildNumber)' 
-          : (latestVersion ?? '');
+
+  String get fullLatestVersion => (latestBuildNumber != null && latestBuildNumber!.isNotEmpty)
+      ? '$latestVersion ($latestBuildNumber)'
+      : (latestVersion ?? '');
 }
 
 class UpdateService {
@@ -40,7 +40,6 @@ class UpdateService {
       'https://github.com/portallcomua/LingoStreamAndroid/releases/latest';
 
   static Future<void> init() async {
-    // Pre-load package info
     await PackageInfo.fromPlatform();
   }
 
@@ -68,9 +67,8 @@ class UpdateService {
       }
 
       final data = jsonDecode(response.body) as Map<String, dynamic>;
-      
-      String latestVersion = (data['tag_name'] ?? '').toString().replaceAll('v', '').trim();
-      
+      var latestVersion = (data['tag_name'] ?? '').toString().replaceAll('v', '').trim();
+
       String? latestBuildNumber;
       if (latestVersion.contains('+')) {
         final parts = latestVersion.split('+');
@@ -80,7 +78,7 @@ class UpdateService {
 
       final releaseUrl = (data['html_url'] ?? _fallbackReleaseUrl).toString().trim();
       final releaseNotes = (data['body'] ?? '').toString().trim();
-      
+
       final assets = data['assets'] as List<dynamic>?;
       String? apkDownloadUrl;
       if (assets != null) {
@@ -112,21 +110,20 @@ class UpdateService {
         releaseUrl: apkDownloadUrl ?? releaseUrl,
         releaseNotes: releaseNotes,
       );
-    } catch (e) {
+    } catch (error) {
       return UpdateCheckResult(
         hasUpdate: false,
         currentVersion: 'unknown',
-        error: e.toString(),
+        error: error.toString(),
       );
     }
   }
 
   static int _compareVersions(String v1, String v2) {
-    final parts1 = v1.split('.').map((p) => int.tryParse(p) ?? 0).toList();
-    final parts2 = v2.split('.').map((p) => int.tryParse(p) ?? 0).toList();
-    
+    final parts1 = v1.split('.').map((part) => int.tryParse(part) ?? 0).toList();
+    final parts2 = v2.split('.').map((part) => int.tryParse(part) ?? 0).toList();
     final maxLen = parts1.length > parts2.length ? parts1.length : parts2.length;
-    
+
     for (var i = 0; i < maxLen; i++) {
       final p1 = i < parts1.length ? parts1[i] : 0;
       final p2 = i < parts2.length ? parts2[i] : 0;
@@ -136,20 +133,9 @@ class UpdateService {
     return 0;
   }
 
-  static Future<bool> openLatestRelease() async {
-    final uri = Uri.parse(_fallbackReleaseUrl);
-    return await launchUrl(
-      uri,
-      mode: LaunchMode.externalApplication,
-    );
-  }
-
   static Future<bool> openReleaseUrl(String? url) async {
     final uri = Uri.tryParse(url ?? _fallbackReleaseUrl);
     if (uri == null) return false;
-    return await launchUrl(
-      uri,
-      mode: LaunchMode.externalApplication,
-    );
+    return launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 }

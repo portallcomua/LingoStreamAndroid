@@ -49,16 +49,16 @@ jobs:
           <manifest xmlns:android="http://schemas.android.com/apk/res/android"
               package="com.example.lingostream">
               <uses-permission android:name="android.permission.INTERNET" />
+              <uses-permission android:name="android.permission.CAMERA" />
               <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
               <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
               <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+              <uses-feature android:name="android.hardware.camera" android:required="false" />
               <application
                   android:label="LingoStream AI"
                   android:name="${applicationName}"
-                  android:icon="@mipmap/ic_launcher">
-                  <meta-data
-                      android:name="com.google.android.gms.ads.APPLICATION_ID"
-                      android:value="ca-app-pub-3940256099942544~3347511713"/>
+                  android:icon="@mipmap/ic_launcher"
+                  android:usesCleartextTraffic="true">
                   <activity
                       android:name=".MainActivity"
                       android:exported="true"
@@ -104,12 +104,22 @@ jobs:
               private val REQ = 1001
               private lateinit var ch: MethodChannel
               private var pending: MethodChannel.Result? = null
+              private var sourceLang = "en"
+              private var targetLang = "uk"
+              private var captureMode = "movie"
               override fun configureFlutterEngine(fe: FlutterEngine) {
                   super.configureFlutterEngine(fe)
                   ch = MethodChannel(fe.dartExecutor.binaryMessenger, CHANNEL)
                   ch.setMethodCallHandler { call, result ->
                       when (call.method) {
-                          "startCapture" -> { pending = result; startCap() }
+                          "startCapture" -> {
+                              val args = call.arguments as? Map<*, *>
+                              sourceLang = args?.get("sourceLang")?.toString() ?: "en"
+                              targetLang = args?.get("targetLang")?.toString() ?: "uk"
+                              captureMode = args?.get("mode")?.toString() ?: "movie"
+                              pending = result
+                              startCap()
+                          }
                           "stopCapture" -> {
                               startService(Intent(this, ScreenCaptureService::class.java).apply { action = "STOP" })
                               result.success(null)
@@ -136,7 +146,12 @@ jobs:
                   if (req == REQ) {
                       if (res == Activity.RESULT_OK && data != null) {
                           val i = Intent(this, ScreenCaptureService::class.java).apply {
-                              action = "START"; putExtra("resultCode", res); putExtra("data", data)
+                              action = "START"
+                              putExtra("resultCode", res)
+                              putExtra("data", data)
+                              putExtra("sourceLang", sourceLang)
+                              putExtra("targetLang", targetLang)
+                              putExtra("mode", captureMode)
                           }
                           if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(i)
                           else startService(i)
@@ -182,7 +197,7 @@ jobs:
           import java.net.HttpURLConnection
           import java.net.URL
           import java.net.URLEncoder
-          import org.json.JSONObject
+          import org.json.JSONArray
           class ScreenCaptureService : Service() {
               private var proj: MediaProjection? = null
               private var vd: VirtualDisplay? = null
@@ -193,9 +208,22 @@ jobs:
               private val bg = Handler(bgt.looper)
               private var running = false
               private var lastTxt = ""
+              private var sourceLang = "en"
+              private var targetLang = "uk"
+              private var captureMode = "movie"
               private val ocr = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
               private val loop = object : Runnable {
-                  override fun run() { if (running) { capture(); bg.postDelayed(this, 1000L) } }
+                  override fun run() {
+                      if (running) {
+                          capture()
+                          val delay = when (captureMode) {
+                              "rock" -> 700L
+                              "pop" -> 1200L
+                              else -> 1500L
+                          }
+                          bg.postDelayed(this, delay)
+                      }
+                  }
               }
               override fun onCreate() {
                   super.onCreate()
@@ -208,6 +236,9 @@ jobs:
                   when (intent?.action) {
                       "START" -> {
                           startForeground(1, buildNotif())
+                          sourceLang = intent.getStringExtra("sourceLang") ?: "en"
+                          targetLang = intent.getStringExtra("targetLang") ?: "uk"
+                          captureMode = intent.getStringExtra("mode") ?: "movie"
                           val rc = intent.getIntExtra("resultCode", -1)
                           val data: Intent? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
                               intent.getParcelableExtra("data", Intent::class.java)
@@ -235,7 +266,7 @@ jobs:
                       text = "Очікування субтитрів..."
                       textSize = 16f
                       setTextColor(android.graphics.Color.WHITE)
-                      setBackgroundColor(android.graphics.Color.parseColor("#DD000000"))
+                      setBackgroundColor(android.graphics.Color.parseColor("#C7000000"))
                       setPadding(24, 14, 24, 14)
                   }
                   val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
@@ -275,11 +306,18 @@ jobs:
               }
               private fun translate(txt: String): String = try {
                   val enc = URLEncoder.encode(txt.take(400), "UTF-8")
-                  val url = URL("https://api.mymemory.translated.net/get?q=$enc&langpair=en|uk")
+                  val url = URL("https://translate.googleapis.com/translate_a/single?client=gtx&sl=$sourceLang&tl=$targetLang&dt=t&q=$enc")
                   val c = url.openConnection() as HttpURLConnection
-                  c.connectTimeout = 5000; c.readTimeout = 5000
+                  c.connectTimeout = 8000; c.readTimeout = 8000
                   val resp = c.inputStream.bufferedReader().readText(); c.disconnect()
-                  JSONObject(resp).getJSONObject("responseData").getString("translatedText")
+                  val arr = JSONArray(resp)
+                  val segments = arr.getJSONArray(0)
+                  val sb = StringBuilder()
+                  for (i in 0 until segments.length()) {
+                      val seg = segments.getJSONArray(i)
+                      sb.append(seg.getString(0))
+                  }
+                  sb.toString().trim()
               } catch (e: Exception) { txt }
               private fun cleanup() {
                   bg.removeCallbacks(loop); vd?.release(); proj?.stop(); ir?.close(); ocr.close()
@@ -306,7 +344,7 @@ jobs:
         run: flutter pub get
 
       - name: Generate icons
-        run: dart run flutter_launcher_icons
+        run: dart run flutter_launcher_icons || true
 
       - name: Build APK
         run: flutter build apk --release
